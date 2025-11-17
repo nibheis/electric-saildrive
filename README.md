@@ -16,4 +16,4 @@ motor      => Electric motor
 J1939_N2K  => J1939 CAN and NMEA2000 (N2K)
 ```
 
-<img src="./images/os-osh-logo.png">
+<img src="./images/os-osh-logo.png" style="width: 50%; height: 50%">
