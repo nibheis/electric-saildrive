@@ -1,0 +1,112 @@
+; ESP32 (STR365 IO)
+
+; Global variables
+(def print-prefix "ESP: ")
+(def vesc-running false)
+
+; Pins related
+(def power-on  1)
+(def power-off 0)
+(def pin-power-can 0) ; ESP IO0 / pin #18 => CAN bus
+(def pin-power-n2k 1) ; ESP IO0 / pin #19 => N2K bus
+
+; Buttons/Switches relates
+(def io-pin-throttle-button 10) ; Active low / PU (IOEXP P10 / pin #13)
+(def pu-pin-pressed 0)
+(def pu-pin-opened  1)
+(def pu-pin-double  2)
+
+; Lib for IOEXP pins
+(import "pkg@://vesc_packages/lib_tca9535/tca9535.vescpkg" 'tca9535)
+(read-eval-program tca9535)
+
+; This function reads throttle-button events
+(defun read-throttle-button () {
+        ; Read push up: set to 1 and when pushed we read 0
+        (tca9535-write-pins '(17 1))
+        (var sum (tca9535-read-pins io-pin-throttle-button))
+        (sleep 0.02)
+        (tca9535-write-pins '(17 1))
+        (var sum (+ sum (tca9535-read-pins io-pin-throttle-button)))
+        (sleep 0.02)
+        (tca9535-write-pins '(17 1))
+        (var sum (+ sum (tca9535-read-pins io-pin-throttle-button)))
+        (if (< sum 2) {
+            (sleep 0.6)
+            pu-pin-pressed
+        } {
+            pu-pin-opened
+        })
+})
+
+(defun launch-thread-reader () {
+    (loopwhile-thd ("PinReader" 150) true {
+        (var pushed (read-throttle-button))
+        (if (eq pushed pu-pin-pressed) (print "Pushed"))
+        (if (eq pushed pu-pin-double) (print "Pushed - Double"))
+        (sleep 0.08)
+    })
+})
+
+
+; Set 'output' mode on given ESP pin
+(defun set-mode-output (pin) {
+    (gpio-configure pin 'pin-mode-out)
+    (gpio-write pin power-off)
+})
+
+; Activate power output (+12V)
+(defun set-power-state (pin power) {
+    (gpio-write pin power)
+})
+
+; Setup pins for power output (and make sure they are off)
+(defun init-output-pins () {
+    (set-mode-output pin-power-can)
+    (set-mode-output pin-power-n2k)
+})
+
+(defun init-io-expander () {
+    ; stop uart as same pins are used for the io-expander
+    (uart-start 0 20 21 115200)
+    (uart-stop 0)
+    (loopwhile (not (main-init-done)) (sleep 0.1))
+    (tca9535-init 0x20 'rate-100k 21 20)
+    (tca9535-set-dir '(17 out))
+})
+
+(defun init () {
+    (init-io-expander)
+    (init-output-pins)
+    (launch-thread-reader)
+})
+
+(defun manage-buses () {
+    (if vesc-running {
+        ; VESC is running => power on both buses
+        (set-power-state pin-power-can power-on)
+        (set-power-state pin-power-n2k power-on)
+    }
+    {
+        ; VESC is not running => power off both buses
+        (set-power-state pin-power-can power-off)
+        (set-power-state pin-power-n2k power-off)
+    })
+})
+
+
+(defun main () {
+    (set-print-prefix print-prefix)
+    (init)
+
+    (def vesc-running true)
+    (loopwhile true {
+        (manage-buses)
+        (sleep 5)
+    })
+})
+
+; Run, Forrest!
+(main)
+
+; EOF
