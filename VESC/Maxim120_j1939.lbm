@@ -7,10 +7,23 @@
 (def j1939-active false)
 (def j1939-ecu-sa 0x00)  ; VESC Source Address (main ECU: 0x00) / J1939 Motor #1 on the Veratron gateway
 
+(def stm-pending-shutdown false)
+
 ; AUX output related globals
 (def power-on  1)
 (def power-off 0)
 (def aux-power-cooling 1) ; AUX1 (+12V) is used for cooling (on pins #17 and #30)
+
+; Target temperatures
+(def cooling-temperature-target 20)
+
+; "unsigned int16" to "byte list / LSB first" convertion function
+(defun uint16-to-lsb (value) {
+    (list
+        (bits-enc-int 0x00 0 value 8)                    ; LSB byte
+        (bits-enc-int 0x00 0 (bits-dec-int value 8 8) 8) ; MSB byte
+    )
+})
 
 ; J1939 related functions
 (defun send-ET1 () {      ; ENGINE TEMPERATURE #1: ET1 (every 1s)
@@ -18,7 +31,7 @@
     (var priority     6)
 
     ; Byte #1: SPN 110: Engine coolant temperature (-40 to 210°C, 1°C/bit)
-    (def temp-coolant (+ (get-temp-fet) 40))   ; TODO: get motor temp (instead of VESC temp)
+    (var temp-coolant (+ (get-temp-fet) 40))   ; TODO: get motor temp (instead of VESC temp)
     ; Byte #2: SPN 174: Engine fuel temperature #1 (-40 to 210°C, 1°C/bit)
     ; 23°C => 63 => 0x3F
     ; Bytes #3 & #4: SPN  175: Engine oil temperature #1 (-273 to 1735°C, 0.03125°C/bit => x 32)
@@ -41,8 +54,9 @@
     ; Byte #3: SPN 513: Actual engine percent torque   (-125% to 125% 1%/bit)
 
     ; Bytes #4 and #5: SPN 190: Engine speed (RPM) (0.125 rpm per bit => x 8)
-    (def rpm 1234)        ; TODO: get real motor rpm
-    (def rpm (* rpm 8))   ;
+    ;(def rpm (mod (rand) 4000))       ; TODO: get real motor rpm
+    (var rpm 1500)        ; TODO: get real motor rpm
+    (var rpm (* rpm 8))   ;
     ; 1234 => 9872 => 0x2690 => 0x90 0x26 (LSB)
 
     (var eid 0x00000000u32)
@@ -179,7 +193,6 @@
             (send-ET1)})
         (sleep 1) ; every ~ 1s
      })
-
     (loopwhile-thd 100 true {
         (if j1939-active {
             (send-EFL)})
@@ -197,6 +210,36 @@
     })
 })
 
+(defun monitor-temp () {
+    (loopwhile-thd 100 true {
+        (var max-loop-when-shutdown 5)
+        (var temp-vesc  (get-temp-fet))
+        (var temp-motor (get-temp-fet)) ; TODO get real motor temp
+
+        (if (and (< temp-vesc cooling-temperature-target) (< temp-motor cooling-temperature-target)) {
+            (print "COLD")
+            (set-aux aux-power-cooling power-on) ; Set AUX1 to OFF
+            (if stm-pending-shutdown {
+                (print "Release shutdown hold! (no need to cool more)")
+                (sleep 1)
+                ;(shutdown-hold false)
+            })
+        } {
+            (print "HOT")
+            (set-aux aux-power-cooling power-on) ; Set AUX1 to OFF
+            (if stm-pending-shutdown {
+                (var curr-loop-when-shutdown (+ curr-loop-when-shutdown 1))
+                (print curr-loop-when-shutdown)
+                (if (> curr-loop-when-shutdown max-loop-when-shutdown) {
+                    (print "Release shutdown hold! (timeout)")
+                    ;(shutdown-hold false)
+                })
+            })
+        })
+        (sleep 1) ; every 1s
+    })
+})
+
 ; Handler for J1939 REQUEST
 (defun can-request (eid data) {
     (if (and j1939-active (eq eid 418054142i32)) { ; 0x18EAFFFE
@@ -205,25 +248,32 @@
         (if (eq data [0xE0 0xFE 0x00]) (send-DIST))
         (if (eq data [0xE5 0xFE 0x00]) (send-HOURS))
     }
+    (if (and j1939-active (eq eid 216662017i32)) { ; 0x18EA0001 (Coming from ESP32)
+        (print "button push received")
+    })
     (free data)
 )})
 
 (defun prepare-shutdown () {
-        (print "shutdown event received")
+    (print "shutdow initiated")
+    (def j1939-active false)
+    (def stm-pending-shutdown true)
 })
 
 ; This function waits for events and calls the appropriate handler
 (defun event-handler () (loopwhile true
     (recv
         ((event-can-eid (? eid) . (? data)) (can-request eid data))
-        ((event-shutdown ()) (prepare-shutdown))
+        (event-shutdown (prepare-shutdown))
         (_ nil) ; ignore other events
 )))
 
 (defun init-event-handler () {
     (event-enable 'event-shutdown)
     (event-enable 'event-can-eid)
+    (print "events enabled")
     (event-register-handler (spawn 150 event-handler))
+    (print "handler registered")
 })
 
 (defun init-aux-output () {
@@ -231,18 +281,21 @@
 })
 
 (defun init () {
-        (init-aux-output)
-        (init-event-handler)
+    (shutdown-hold true)
+    (print "shutdown-hold is set to true")
+    (init-aux-output)
+    (init-event-handler)
 })
 
 (defun main () {
     (set-print-prefix print-prefix)
     (init)
+    (monitor-temp)
     (j1939-autosend)
     (def j1939-active true)
 })
 
-; Run, Forrest!!
+; Run, Forrest, run!
 (main)
 
 ; EOF

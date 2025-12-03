@@ -1,8 +1,10 @@
 ; ESP32 (STR365 IO)
 
 ; Global variables
-(def print-prefix "ESP: ")
-(def vesc-running false)
+(def print-prefix  "ESP: ")
+(def vesc-running  false)
+(def j1939-ecu-sa  0x00)    ; STM32 (main ECU on j1939)
+(def j1939-ecu2-sa 0x01)    ; ESP32 (here)
 
 ; Pins related
 (def power-on  1)
@@ -39,10 +41,28 @@
         })
 })
 
+(defun send-j1939-request () {
+    (var pgn      0xEA)   ; CAN request with DA 0x00 (STM32)
+    (var priority    3)   ; 3, because I decided
+
+    ; This is not a standard J1939 request
+    ; This is our own protocol to send events to STM32
+    ; ...so we can use the 3 data bytes as we want.
+
+    (var eid 0x00000000u32)
+    (var eid (bits-enc-int eid 0 j1939-ecu2-sa 8)) ; SA
+    (var eid (bits-enc-int eid 8 j1939-ecu-sa 8))  ; DA
+    (var eid (bits-enc-int eid 16 pgn 10))         ; PGN
+    (var eid (bits-enc-int eid 26 priority 3))     ; PRIO
+
+    (var data (list 0x01 0x02 0x03))
+    (can-send-eid eid data)
+})
+
 (defun launch-thread-reader () {
     (loopwhile-thd ("PinReader" 150) true {
         (var pushed (read-throttle-button))
-        (if (eq pushed pu-pin-pressed) (print "Pushed"))
+        (if (eq pushed pu-pin-pressed) (send-j1939-request))
         (if (eq pushed pu-pin-double) (print "Pushed - Double"))
         (sleep 0.08)
     })
@@ -106,7 +126,7 @@
     })
 })
 
-; Run, Forrest!
+; Run, Forrest, run!
 (main)
 
 ; EOF
