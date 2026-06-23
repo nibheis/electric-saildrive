@@ -22,6 +22,7 @@
 (import "pkg@://vesc_packages/lib_tca9535/tca9535.vescpkg" 'tca9535)
 (read-eval-program tca9535)
 
+
 ; This function reads throttle-button events
 (defun read-throttle-button () {
         ; Read push up: set to 1 and when pushed we read 0
@@ -70,7 +71,6 @@
     })
 })
 
-
 ; Set 'output' mode on given ESP pin
 (defun set-mode-output (pin) {
     (gpio-configure pin 'pin-mode-out)
@@ -89,7 +89,7 @@
 })
 
 (defun init-io-expander () {
-    ; stop uart as same pins are used for the io-expander
+    ; Stop UART as same pins are used for the io-expander
     (uart-start 0 20 21 115200)
     (uart-stop 0)
     (loopwhile (not (main-init-done)) (sleep 0.1))
@@ -98,14 +98,13 @@
 })
 
 (defun init () {
-    ;(can-update-baud 250)
     (init-io-expander)
     (init-output-pins)
     (launch-thread-reader)
 })
 
 (defun manage-buses () {
-    ; VESC is running => power on both buses
+    ; Power on both buses
     (set-power-state pin-power-can power-on)
     (set-power-state pin-power-n2k power-on)
 })
@@ -126,7 +125,6 @@
     })
 })
 
-(sleep 10)
 ; Run, Forrest, run!
 (main-esp)
 

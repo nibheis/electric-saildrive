@@ -5,30 +5,16 @@
 
 ; J1939
 (def j1939-active false)
-(def j1939-ecu-sa 0x00)  ; VESC Source Address (main ECU: 0x00) / J1939 Motor #1 on the Veratron gateway
-
-;(def stm-pending-shutdown false)
-
-; AUX output related globals
-;(def power-on  1)
-;(def power-off 0)
-;(def aux-power-cooling 1) ; AUX1 (+12V) is used for cooling (on pins #17 and #30)
+(def j1939-ecu-sa 0x00)         ; VESC Source Address (main ECU: 0x00) / J1939 Motor #1 on the Veratron gateway
 
 ; Eco mode
 (def input-max-std (conf-get 'l-in-current-max)) ; default maximum input current (Amps)
-(def input-max-eco 5)          ; Eco mode max input current (Amps)
+(def input-max-eco 5)           ; Eco mode max input current (Amps)
 (def eco-mode-active false)     ; Track eco mode state
 
 ; Target temperatures
 (def cooling-temperature-target 40)
 
-;; "unsigned int16" to "byte list / LSB first" convertion function
-;(defun uint16-to-lsb (value) {
-;    (list
-;        (bits-enc-int 0x00 0 value 8)                    ; LSB byte
-;        (bits-enc-int 0x00 0 (bits-dec-int value 8 8) 8) ; MSB byte
-;    )
-;})
 
 ; J1939 related functions
 (defun send-ET1 () {      ; ENGINE TEMPERATURE #1: ET1 (every 1s)
@@ -202,6 +188,7 @@
     (can-send-eid eid data)
 })
 
+
 ; Start J1939 loops
 (defun j1939-autosend () {
     (loopwhile-thd 100 true {
@@ -226,6 +213,7 @@
     })
 })
 
+
 ; Monitor temperature loop (no action)
 (defun monitor-temp () {
     (loopwhile-thd 100 true {
@@ -246,6 +234,7 @@
     })
 })
 
+
 ; Handler for J1939 REQUEST
 (defun can-request (eid data) {
     (if (and j1939-active (eq eid 418054142i32)) { ; 0x18EAFFFE
@@ -254,7 +243,7 @@
         (if (eq data [0xE0 0xFE 0x00]) (send-DIST))
         (if (eq data [0xE5 0xFE 0x00]) (send-HOURS))
     }
-    (if (and j1939-active (eq eid 216662017i32)) { ; 0x18EA0001 (Coming from ESP32)
+    (if (and j1939-active (eq eid 216662017i32)) { ; 0x18EA0001 (Coming from ESP)
         ; toggle eco mode
         (if eco-mode-active {
             (conf-set 'l-in-current-max input-max-std)
@@ -271,44 +260,30 @@
     (free data)
 )})
 
-;(defun prepare-shutdown () {
-;    (print "shutdow initiated")
-;    (def j1939-active false)
-;    (def stm-pending-shutdown true)
-;})
-
 ; This function waits for events and calls the appropriate handler
 (defun event-handler () (loopwhile true
     (recv
         ((event-can-eid (? eid) . (? data)) (can-request eid data))
-        ;(event-shutdown (prepare-shutdown))
         (_ nil) ; ignore other events
 )))
 
+
 (defun init-event-handler () {
-    ;(event-enable 'event-shutdown)
     (event-enable 'event-can-eid)
     (print "events enabled")
     (event-register-handler (spawn 150 event-handler))
     (print "handler registered")
 })
 
-;(defun init-aux-output () {
-;    (set-aux aux-power-cooling power-off) ; Set AUX1 to OFF
-;})
 
 (defun init () {
-    ;(shutdown-hold true)
-    ;(print "shutdown-hold is set to true")
-    ;(init-aux-output)
-    ;(can-update-baud 250)
     (init-event-handler)
 })
 
 (defun main-stm () {
     (set-print-prefix print-prefix)
     (init)
-    (print "Init done on Maxim")
+    (print "Init done")
 
     (monitor-temp)
     (print "Temperature monitoring loop started")
