@@ -2,21 +2,21 @@
 
 ; Global variables
 (def print-prefix  "ESP: ")
-(def vesc-running  false)
-(def j1939-ecu-sa  0x00)    ; STM32 (main ECU on j1939)
+(def init-done  false)
+(def j1939-ecu-sa  0x00)    ; STM32 (main ECU on J1939)
 (def j1939-ecu2-sa 0x01)    ; ESP32 (here)
 
 ; Pins related
 (def power-on  1)
 (def power-off 0)
 (def pin-power-can 0) ; ESP IO0 / pin #18 => CAN bus
-(def pin-power-n2k 1) ; ESP IO0 / pin #19 => N2K bus
+(def pin-power-n2k 1) ; ESP IO1 / pin #19 => N2K bus
 
 ; Buttons/Switches relates
 (def io-pin-throttle-button 10) ; Active low / PU (IOEXP P10 / pin #13)
 (def pu-pin-pressed 0)
 (def pu-pin-opened  1)
-(def pu-pin-double  2)
+;(def pu-pin-double  2)
 
 ; Lib for IOEXP pins
 (import "pkg@://vesc_packages/lib_tca9535/tca9535.vescpkg" 'tca9535)
@@ -55,6 +55,7 @@
     (var eid (bits-enc-int eid 16 pgn 10))         ; PGN
     (var eid (bits-enc-int eid 26 priority 3))     ; PRIO
 
+    ; Let's send "0x01 0x02 0x03" to indicate the button was pushed
     (var data (list 0x01 0x02 0x03))
     (can-send-eid eid data)
 })
@@ -62,8 +63,9 @@
 (defun launch-thread-reader () {
     (loopwhile-thd ("PinReader" 150) true {
         (var pushed (read-throttle-button))
+        ;(if (eq pushed pu-pin-pressed) (print "Pushed"))
         (if (eq pushed pu-pin-pressed) (send-j1939-request))
-        (if (eq pushed pu-pin-double) (print "Pushed - Double"))
+        ;(if (eq pushed pu-pin-double) (print "Pushed - Double"))
         (sleep 0.08)
     })
 })
@@ -96,37 +98,36 @@
 })
 
 (defun init () {
+    ;(can-update-baud 250)
     (init-io-expander)
     (init-output-pins)
     (launch-thread-reader)
 })
 
 (defun manage-buses () {
-    (if vesc-running {
-        ; VESC is running => power on both buses
-        (set-power-state pin-power-can power-on)
-        (set-power-state pin-power-n2k power-on)
-    }
-    {
-        ; VESC is not running => power off both buses
-        (set-power-state pin-power-can power-off)
-        (set-power-state pin-power-n2k power-off)
-    })
+    ; VESC is running => power on both buses
+    (set-power-state pin-power-can power-on)
+    (set-power-state pin-power-n2k power-on)
 })
 
 
-(defun main () {
+(defun main-esp () {
     (set-print-prefix print-prefix)
     (init)
+    (print "Init done on IOEXP")
 
-    (def vesc-running true)
+    (def init-done true)
+    (print "IOEXP set as ready")
+
     (loopwhile true {
         (manage-buses)
-        (sleep 5)
+        (print "Sending power on CAN and NMEA buses")
+        (sleep 10)
     })
 })
 
+(sleep 10)
 ; Run, Forrest, run!
-(main)
+(main-esp)
 
 ; EOF
