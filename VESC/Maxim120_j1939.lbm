@@ -166,10 +166,13 @@
     (var pgn     0xFEE5)    ; 65253
     (var priority     6)
 
-    ; Bytes #1, #2, #3 & #4: SPN 247: Total engine hours (0.05 hours/bit => x 20)
+    ; Bytes #1, #2, #3 & #4: SPN 247: Total engine hours
+    ; 0.05 hours/bit => 180 seconds/bit
+    ;
     (var runtime-sec (sysinfo 'runtime))
-    (var runtime-hrs (to-i (/ runtime-sec 3600)))
-    (var hours-scaled (to-i (* runtime-hrs 20)))
+    ;(var runtime-hrs (to-i (/ runtime-sec 3600)))
+    ;(var hours-scaled (to-i (* runtime-hrs 20)))
+    (var hours-scaled (to-i (/ runtime-sec 180)))
 
     (var hours-b0 (bits-enc-int 0x00 0 hours-scaled 8))
     (var hours-b1 (bits-enc-int 0x00 0 (bits-dec-int hours-scaled 8 8) 8))
@@ -280,7 +283,7 @@
     (init-event-handler)
 })
 
-(defun main-stm () {
+(defun main () {
     (set-print-prefix print-prefix)
     (init)
     (print "Init done")
@@ -293,7 +296,10 @@
     (print "J1939 loops started")
 })
 
+; Speed-up next reboot
+(image-save)
+
 ; Run, Forrest, run!
-(main-stm)
+(main)
 
 ; EOF

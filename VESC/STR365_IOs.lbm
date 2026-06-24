@@ -89,10 +89,7 @@
 })
 
 (defun init-io-expander () {
-    ; Stop UART as same pins are used for the io-expander
-    (uart-start 0 20 21 115200)
-    (uart-stop 0)
-    (loopwhile (not (main-init-done)) (sleep 0.1))
+    ; No need to stop UART - deactivated on boot since FW 7.00 git #ecc95abc
     (tca9535-init 0x20 'rate-100k 21 20)
     (tca9535-set-dir '(17 out))
 })
@@ -110,7 +107,7 @@
 })
 
 
-(defun main-esp () {
+(defun main () {
     (set-print-prefix print-prefix)
     (init)
     (print "Init done on IOEXP")
@@ -125,7 +122,10 @@
     })
 })
 
+; Speed-up next reboot
+(image-save)
+
 ; Run, Forrest, run!
-(main-esp)
+(main)
 
 ; EOF
