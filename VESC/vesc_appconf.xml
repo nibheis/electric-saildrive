@@ -41,8 +41,8 @@
     <app_ppm_conf.smart_rev_ramp_time>3</app_ppm_conf.smart_rev_ramp_time>
     <app_adc_conf.ctrl_type>13</app_adc_conf.ctrl_type>
     <app_adc_conf.hyst>0.15</app_adc_conf.hyst>
-    <app_adc_conf.voltage_start>0.34</app_adc_conf.voltage_start>
-    <app_adc_conf.voltage_end>3.05</app_adc_conf.voltage_end>
+    <app_adc_conf.voltage_start>0.35</app_adc_conf.voltage_start>
+    <app_adc_conf.voltage_end>3.06</app_adc_conf.voltage_end>
     <app_adc_conf.voltage_min>0</app_adc_conf.voltage_min>
     <app_adc_conf.voltage_max>3.5</app_adc_conf.voltage_max>
     <app_adc_conf.voltage_center>1.74</app_adc_conf.voltage_center>
@@ -58,7 +58,7 @@
     <app_adc_conf.throttle_exp_mode>2</app_adc_conf.throttle_exp_mode>
     <app_adc_conf.ramp_time_pos>0.3</app_adc_conf.ramp_time_pos>
     <app_adc_conf.ramp_time_neg>0.1</app_adc_conf.ramp_time_neg>
-    <app_adc_conf.multi_esc>1</app_adc_conf.multi_esc>
+    <app_adc_conf.multi_esc>0</app_adc_conf.multi_esc>
     <app_adc_conf.tc>0</app_adc_conf.tc>
     <app_adc_conf.tc_max_diff>3000</app_adc_conf.tc_max_diff>
     <app_adc_conf.update_rate_hz>500</app_adc_conf.update_rate_hz>

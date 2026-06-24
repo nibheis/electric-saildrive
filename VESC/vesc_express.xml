@@ -7,7 +7,7 @@
     <can_baud_rate>1</can_baud_rate>
     <wifi_mode>1</wifi_mode>
     <wifi_sta_ssid>SVC_LAN_LS</wifi_sta_ssid>
-    <wifi_sta_key>WIFILAN59</wifi_sta_key>
+    <wifi_sta_key></wifi_sta_key>
     <wifi_ap_ssid>VESC WiFi</wifi_ap_ssid>
     <wifi_ap_key>vesc6wifi</wifi_ap_key>
     <use_tcp_local>1</use_tcp_local>
@@ -18,7 +18,7 @@
     <tcp_hub_pass></tcp_hub_pass>
     <ble_mode>1</ble_mode>
     <ble_name>mikasa</ble_name>
-    <ble_pin>123456</ble_pin>
+    <ble_pin></ble_pin>
     <ble_service_capacity>0</ble_service_capacity>
     <ble_chr_descr_capacity>0</ble_chr_descr_capacity>
 </CustomConfiguration>

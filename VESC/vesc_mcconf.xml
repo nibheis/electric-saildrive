@@ -5,16 +5,16 @@
     <comm_mode>0</comm_mode>
     <motor_type>2</motor_type>
     <sensor_mode>0</sensor_mode>
-    <l_current_max>20</l_current_max>
-    <l_current_min>-20</l_current_min>
-    <l_in_current_max>20</l_in_current_max>
-    <l_in_current_min>-20</l_in_current_min>
-    <l_in_current_map_start>1</l_in_current_map_start>
-    <l_in_current_map_filter>0.005</l_in_current_map_filter>
-    <l_abs_current_max>30</l_abs_current_max>
-    <l_min_erpm>-40</l_min_erpm>
-    <l_max_erpm>40</l_max_erpm>
-    <l_erpm_start>0.8</l_erpm_start>
+    <l_current_max>400</l_current_max>
+    <l_current_min>-100</l_current_min>
+    <l_in_current_max>350</l_in_current_max>
+    <l_in_current_min>-350</l_in_current_min>
+    <l_in_current_map_start>0.9</l_in_current_map_start>
+    <l_in_current_map_filter>0.002</l_in_current_map_filter>
+    <l_abs_current_max>600</l_abs_current_max>
+    <l_min_erpm>-13000</l_min_erpm>
+    <l_max_erpm>13000</l_max_erpm>
+    <l_erpm_start>0.75</l_erpm_start>
     <l_max_erpm_fbrake>300</l_max_erpm_fbrake>
     <l_max_erpm_fbrake_cc>1500</l_max_erpm_fbrake_cc>
     <l_min_vin>48</l_min_vin>
@@ -31,7 +31,7 @@
     <l_temp_accel_dec>0.15</l_temp_accel_dec>
     <l_min_duty>0.005</l_min_duty>
     <l_max_duty>0.95</l_max_duty>
-    <l_watt_max>500</l_watt_max>
+    <l_watt_max>20000</l_watt_max>
     <l_watt_min>-500</l_watt_min>
     <l_current_max_scale>1</l_current_max_scale>
     <l_current_min_scale>1</l_current_min_scale>
@@ -164,14 +164,14 @@
     <m_duty_ramp_step>0.02</m_duty_ramp_step>
     <m_current_backoff_gain>0.5</m_current_backoff_gain>
     <m_encoder_counts>8192</m_encoder_counts>
-    <m_encoder_sin_amp>2</m_encoder_sin_amp>
-    <m_encoder_cos_amp>2</m_encoder_cos_amp>
+    <m_encoder_sin_amp>1.5</m_encoder_sin_amp>
+    <m_encoder_cos_amp>1.5</m_encoder_cos_amp>
     <m_encoder_sin_offset>2.5</m_encoder_sin_offset>
     <m_encoder_cos_offset>2.5</m_encoder_cos_offset>
     <m_encoder_sincos_filter_constant>0.5</m_encoder_sincos_filter_constant>
     <m_encoder_sincos_phase_correction>0</m_encoder_sincos_phase_correction>
     <m_sensor_port_mode>4</m_sensor_port_mode>
-    <m_invert_direction>1</m_invert_direction>
+    <m_invert_direction>0</m_invert_direction>
     <m_drv8301_oc_mode>0</m_drv8301_oc_mode>
     <m_drv8301_oc_adj>16</m_drv8301_oc_adj>
     <m_bldc_f_sw_min>3000</m_bldc_f_sw_min>
