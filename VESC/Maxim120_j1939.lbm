@@ -9,7 +9,7 @@
 
 ; Eco mode
 (def input-max-std (conf-get 'l-in-current-max)) ; default maximum input current (Amps)
-(def input-max-eco 5)           ; Eco mode max input current (Amps)
+(def input-max-eco 240)         ; Eco mode max input current (Amps)
 (def eco-mode-active false)     ; Track eco mode state
 
 ; Target temperatures
