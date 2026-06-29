@@ -33,8 +33,5 @@ logs/
 *.log
 recorded.log
 
-# CAN interface setup scripts (local environment specific)
-*.sh
-
 # Archives / old files
 archives/
