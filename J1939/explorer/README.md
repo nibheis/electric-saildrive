@@ -90,7 +90,7 @@ Shows a live view of current decoded data on the CAN bus:
 ```
 
 - **`J1939MessageStore`** — Keeps the latest message per EID and a 15-second rolling timestamp window for rate calculations. All operations are thread-safe.
-- **`CANThread`** — Opens a `socketcan` bus using `python-can` and feeds incoming messages into the store.
+- **`CANThread`** — Opens a `socketcan` bus using `python-can` and feeds incoming messages into the store. Automatically reconnects with a 1 s backoff if the link goes down or the interface is unavailable at startup.
 - **`ExplorerApp`** — Loads `J1939_dictionnary.json` on startup. Refreshes the active screen every **500 ms** from the shared store.
 - **Dictionary filtering** — Only SPNs with `"display": true` are rendered in the **Messages** and **Live** screens.
 
@@ -114,4 +114,5 @@ cd pip-compile && ./setup_venv
 
 - The app is **read-only**; it does not send messages on the bus.
 - **Freeze** (Space) pauses display updates so you can inspect data without it scrolling away. Background CAN collection continues normally.
-- If the CAN interface is not available, the store remains empty and the UI shows zeros.
+- **Auto-reconnect** — If the CAN link drops, the app shows `Connected: NO`, retries every second, and automatically resumes showing `Connected: YES` when the link comes back up.
+- If the CAN interface is not available at startup, the store remains empty and the UI shows zeros while retrying in the background.

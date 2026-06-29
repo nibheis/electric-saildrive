@@ -81,23 +81,7 @@ self.timestamps_window: deque    # list of (timestamp, eid), pruned to 15 s
 
 ---
 
-## 5. Threading Model
-
-**Two threads:**
-1. **CANThread** (`j1939_can.py`) — daemon thread, blocks on `bus.recv(timeout=0.1)`. Calls `store.add()` on every message.
-2. **Textual main loop** — runs the TUI, handles input, and fires `_tick()` every 500 ms via `set_interval(0.5, ...)`.
-
-**Synchronisation:**  All shared state lives in `J1939MessageStore`, protected by a single lock. The UI only reads; the CAN thread only writes.
-
-**Lifecycle:**
-- App creates thread in `on_mount()`.
-- App signals stop via `Event` in `on_unmount()` and joins with 1 s timeout.
-
-**Pitfall:**  `python-can`'s `Bus` context manager calls `shutdown()` on exit, but since the bus is created inside the thread, there is no cross-thread shutdown race.
-
----
-
-## 6. Textual Widget Hierarchy
+## 5. Textual Widget Hierarchy
 
 ```
 ExplorerApp (Screen)
@@ -120,6 +104,45 @@ All three screens are siblings in the DOM. Mode switching is done by toggling `d
 
 ### Why `Static` containers instead of `Screen`?
 The app uses a single `Screen` with stacked `Static` widgets. This avoids managing a screen stack and keeps the header/footer persistent without re-mounting.
+
+---
+
+## 6. Threading Model
+
+**Two threads:**
+1. **CANThread** (`j1939_can.py`) — daemon thread with an **outer reconnect loop**.
+2. **Textual main loop** — runs the TUI, handles input, and fires `_tick()` every 500 ms via `set_interval(0.5, ...)`.
+
+### CANThread reconnect loop
+
+```python
+while not stopped:
+    try:
+        with can.Bus(...) as bus:
+            store.on_connect()          # mark Connected = YES
+            while not stopped:
+                msg = bus.recv(timeout=0.1)
+                if msg:
+                    store.add(...)
+    except Exception:
+        store.on_disconnect()           # mark Connected = NO
+        if stopped.wait(1.0):           # 1 s backoff, interruptible
+            return
+```
+
+**Benefits:**
+- **Startup without interface** → `Disconnected`, retries every second until the interface appears.
+- **Runtime link drop** → catches `Exception` from `bus.recv()`, marks `Disconnected`, closes the bus context cleanly, then retries.
+- **Link recovery** → next iteration of the outer `while` loop opens the bus again and marks `Connected`.
+- **Graceful shutdown** → `stop()` sets the `Event`; both the inner read loop and the retry sleep exit immediately.
+
+**Synchronisation:**  All shared state lives in `J1939MessageStore`, protected by a single lock. The UI only reads; the CAN thread only writes.
+
+**Lifecycle:**
+- App creates thread in `on_mount()`.
+- App signals stop via `Event` in `on_unmount()` and joins with 1 s timeout.
+
+**Pitfall:**  `python-can`'s `Bus` context manager calls `shutdown()` on exit, but since the bus is created inside the thread, there is no cross-thread shutdown race.
 
 ---
 
@@ -308,7 +331,8 @@ class TestApp(ExplorerApp):
 | **SPN size** | Only 1-byte and 2-byte SPNs supported | Add 3-byte, 4-byte, bit-field decoding |
 | **Endianness** | Assumes little-endian | Support big-endian flag in dictionary |
 | **CAN interface** | Hard-coded `socketcan` | Make interface type configurable (e.g. `pcan`, `virtual`) |
-| **Error handling** | Silently disconnects on CAN error | Show error banner in UI |
+| **Error handling** | Auto-reconnects with 1 s backoff; only shows `Connected: YES/NO` | Show error banner / last error message in UI |
+| **Link resilience** | Reconnect loop works for startup failure and runtime drops | Notify user with toast on link loss / recovery |
 | **Data logging** | None | Add optional log-to-file in `CANThread` |
 | **Message send** | Read-only only | Could extend with a send panel later |
 | **PGN 65262 only** | ET1 is the only defined PGN in the checked-in JSON | Expand dictionary as needed |
