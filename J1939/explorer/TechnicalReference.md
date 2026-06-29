@@ -130,6 +130,7 @@ BINDINGS = [
     ("f1", "switch_mode('stats')",    "Stats"),
     ("f2", "switch_mode('messages')",  "Messages"),
     ("f3", "switch_mode('live')",      "Live"),
+    ("space", "toggle_freeze",         "Freeze"),
     ("q",  "quit",                     "Quit"),
 ]
 ```
@@ -149,7 +150,37 @@ The fix was to rename the field to `explorer_mode`.
 
 ---
 
-## 8. Messages Screen Detail Panel
+## 8. Freeze Toggle (`space`)
+
+A boolean `self._frozen` on `ExplorerApp` gates the `_tick()` method.  When active:
+- `_tick()` returns immediately — no screen widgets are refreshed.
+- The **CAN thread keeps running** in the background; messages continue to accumulate in `J1939MessageStore`.
+- The header subtitle shows `[FROZEN]` (e.g. `(stats) [FROZEN]`).
+- A toast notification confirms the state change (`severity="warning"` for freeze, `"information"` for resume).
+
+### Implementation sketch
+
+```python
+def action_toggle_freeze(self):
+    self._frozen = not self._frozen
+    self._set_mode(self.explorer_mode)  # refresh subtitle
+    if self._frozen:
+        self.notify("Display frozen", severity="warning")
+    else:
+        self.notify("Display resumed", severity="information")
+
+def _tick(self):
+    if self._frozen:
+        return
+    ...  # normal refresh logic
+```
+
+### Why gate `_tick()` instead of stop the timer?
+Stopping the interval timer would require restarting it on unfreeze, which is more complex.  A simple early-return inside `_tick()` achieves the same effect with less state management.
+
+---
+
+## 9. Messages Screen Detail Panel
 
 The `DataTable` uses `cursor_type="row"`.  When the cursor moves, Textual posts a `DataTable.RowHighlighted` message.  The handler is defined **on the parent `MessagesScreen`** (not on the table itself) and looks like this:
 
@@ -165,7 +196,7 @@ Because `MessagesScreen` is the parent in the DOM, it receives the message bubbl
 
 ---
 
-## 9. Live Screen — DataTable Columns
+## 10. Live Screen — DataTable Columns
 
 ```python
 table.add_column("PGN",   width=6)
@@ -180,7 +211,7 @@ The table is fully cleared and rebuilt every tick, similar to the Messages table
 
 ---
 
-## 10. SPN Decoding
+## 11. SPN Decoding
 
 `decode_spn()` in `j1939_can.py`:
 
@@ -199,7 +230,7 @@ This heuristic keeps temperatures like `85.0°C` from showing as `85.00°C` whil
 
 ---
 
-## 11. Dictionary JSON Schema
+## 12. Dictionary JSON Schema
 
 `J1939_dictionnary.json` is loaded once at startup by `load_dictionary()`.
 
@@ -230,7 +261,7 @@ Each SPN spec:
 
 ---
 
-## 12. CSS Styling
+## 13. CSS Styling
 
 ```css
 Screen { layout: vertical; width: 100%; height: 100%; }
@@ -248,7 +279,7 @@ The remaining space is shared by the three `Static` screens.  Widths are percent
 
 ---
 
-## 13. Testing Without Hardware
+## 14. Testing Without Hardware
 
 Because the app relies on `socketcan`, running on a machine without a CAN interface will simply show empty stats.  To test UI logic:
 
@@ -269,7 +300,7 @@ class TestApp(ExplorerApp):
 
 ---
 
-## 14. Known Limitations & Future Work
+## 15. Known Limitations & Future Work
 
 | Topic | Current State | Possible Improvement |
 |---|---|---|
@@ -284,7 +315,7 @@ class TestApp(ExplorerApp):
 
 ---
 
-## 15. Quick Reference — Key Classes
+## 16. Quick Reference — Key Classes
 
 | Class | File | Role |
 |---|---|---|
@@ -300,7 +331,7 @@ class TestApp(ExplorerApp):
 
 ---
 
-## 16. Dependency Versions (at time of writing)
+## 17. Dependency Versions (at time of writing)
 
 - `textual` 8.2.7
 - `python-can` 4.6.1

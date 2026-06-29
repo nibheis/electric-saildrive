@@ -45,6 +45,7 @@ python explorer can1
 | **F1** | Switch to **Stats** mode |
 | **F2** | Switch to **Messages** mode |
 | **F3** | Switch to **Live** mode |
+| **Space** | **Freeze** / **Unfreeze** the display |
 | **Q**  | Quit |
 
 ---
@@ -112,4 +113,5 @@ cd pip-compile && ./setup_venv
 ## Notes
 
 - The app is **read-only**; it does not send messages on the bus.
+- **Freeze** (Space) pauses display updates so you can inspect data without it scrolling away. Background CAN collection continues normally.
 - If the CAN interface is not available, the store remains empty and the UI shows zeros.
