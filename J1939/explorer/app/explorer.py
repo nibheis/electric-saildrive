@@ -255,6 +255,7 @@ class ExplorerApp(App):
         ("f1", "switch_mode('stats')", "Stats"),
         ("f2", "switch_mode('messages')", "Messages"),
         ("f3", "switch_mode('live')", "Live"),
+        ("space", "toggle_freeze", "Freeze"),
         ("q", "quit", "Quit"),
     ]
 
@@ -266,6 +267,7 @@ class ExplorerApp(App):
         self.store = J1939MessageStore()
         self.can_thread: Optional[CANThread] = None
         self._update_timer = None
+        self._frozen: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -291,18 +293,29 @@ class ExplorerApp(App):
     def action_switch_mode(self, mode: str):
         self._set_mode(mode)
 
+    def action_toggle_freeze(self):
+        self._frozen = not self._frozen
+        self._set_mode(self.explorer_mode)
+        if self._frozen:
+            self.notify("Display frozen", severity="warning")
+        else:
+            self.notify("Display resumed", severity="information")
+
     def _set_mode(self, mode: str):
         self.explorer_mode = mode
         for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE):
             screen = self.query_one(f"#{m}", Static)
             screen.display = (m == mode)
-        self.sub_title = f"({mode})"
+        freeze_tag = " [FROZEN]" if self._frozen else ""
+        self.sub_title = f"({mode}){freeze_tag}"
 
     def _start_can(self):
         self.can_thread = CANThread(channel=self._channel, store=self.store)
         self.can_thread.start()
 
     def _tick(self):
+        if self._frozen:
+            return
         mode = self.explorer_mode
         if mode == MODE_STATS:
             self.query_one(f"#{MODE_STATS}", StatsScreen).update_stats(self.store.stats())
