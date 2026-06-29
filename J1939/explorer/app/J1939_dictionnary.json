@@ -1,0 +1,36 @@
+{
+    "65262": {
+        "nickname": "ET1",
+        "description": "ENGINE TEMPERATURE #1",
+        "display": true,
+        "spns": {
+            "110": {
+                "nickname": "MT",
+                "description": "MOTOR TEMPERATURE",
+                "display": true,
+                "bytes": [ 0 ],
+                "unit": "°C",
+                "per_bit": 1,
+                "offset": -40
+            },
+            "174": {
+                "nickname": "EFT",
+                "description": "ENGINE FUEL TEMPERATURE",
+                "bytes": [ 1 ],
+                "display": false,
+                "unit": "°C",
+                "per_bit": 1,
+                "offset": -40
+            },
+            "175": {
+                "nickname": "CT",
+                "description": "CONTROLLER TEMPERATURE",
+                "display": true,
+                "bytes": [ 2, 3 ],
+                "unit": "°C",
+                "per_bit": 0.03125,
+                "offset": -273
+            }
+        }
+    }
+}
