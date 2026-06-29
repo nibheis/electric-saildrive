@@ -140,16 +140,23 @@ class CANThread(threading.Thread):
 
     def run(self):
         if can is None:
-            return
-        try:
-            with can.Bus(interface="socketcan", channel=self.channel, receive_own_messages=False) as bus:
-                self.store.on_connect()
-                while not self._stop.is_set():
-                    msg = bus.recv(timeout=0.1)
-                    if msg is not None:
-                        self.store.add(msg.arbitration_id, msg.data)
-        except Exception:
             self.store.on_disconnect()
+            return
+        while not self._stop.is_set():
+            try:
+                with can.Bus(
+                    interface="socketcan", channel=self.channel, receive_own_messages=False
+                ) as bus:
+                    self.store.on_connect()
+                    while not self._stop.is_set():
+                        msg = bus.recv(timeout=0.1)
+                        if msg is not None:
+                            self.store.add(msg.arbitration_id, msg.data)
+            except Exception:
+                self.store.on_disconnect()
+                # Wait 1 s before attempting to reconnect
+                if self._stop.wait(1.0):
+                    return  # stop() was called during the sleep
 
     def stop(self):
         self._stop.set()
