@@ -162,12 +162,11 @@ class MessagesScreen(Static):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="messages_vertical_container"):
-            yield Static("Messages", classes="bold")
             table = DataTable(show_header=True, show_cursor=True, cursor_type="row", zebra_stripes=True)
             table.add_column("EID", width=9)
             table.add_column("Age", width=5)
             yield table
-            yield Static("Detail", classes="bold")
+            yield Static(" Message details ", classes="section_header")
             yield Static("Select a message", id="messages_detail_content")
 
     @property
