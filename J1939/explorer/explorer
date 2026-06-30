@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
+#!./j1939_venv/bin/python3
 """Launcher for J1939 Explorer."""
-import sys
 from app.explorer import main
 
 if __name__ == "__main__":
