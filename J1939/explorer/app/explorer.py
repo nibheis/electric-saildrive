@@ -367,13 +367,16 @@ class ConfigScreen(Static):
             yield Static("")
             yield Button("Apply", id="config_apply_btn", variant="primary")
             yield Button("Revert", id="config_revert_btn", variant="default")
-            yield Button("Set Down", id="config_down_btn", variant="warning")
+            yield Button("Set UP", id="config_up_btn", variant="success")
+            yield Button("Set DOWN", id="config_down_btn", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "config_apply_btn":
             self.apply_config()
         elif event.button.id == "config_revert_btn":
             self.revert_config()
+        elif event.button.id == "config_up_btn":
+            self.set_up()
         elif event.button.id == "config_down_btn":
             self.set_down()
 
@@ -475,6 +478,17 @@ class ConfigScreen(Static):
         self._update_status()
         if self.app:
             self.app.notify("Settings reverted", severity="information", timeout=2)
+
+    def set_up(self):
+        iface = self._config.get("socketcan_interface", "can0")
+        try:
+            subprocess.run(["sudo", "ip", "link", "set", "up", iface], check=True)
+            if self.app:
+                self.app.notify(f"Interface {iface} up", severity="information", timeout=2)
+        except subprocess.CalledProcessError as exc:
+            if self.app:
+                self.app.notify(f"Set up error: {exc}", severity="error", timeout=3)
+        self._update_status()
 
     def set_down(self):
         iface = self._config.get("socketcan_interface", "can0")
