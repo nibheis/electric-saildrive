@@ -226,7 +226,7 @@ class MessagesScreen(Static):
         lines = [
             f"EID : {eid:08X}",
             f"PRIO: {priority}",
-            f"PGN : {pgn} 0x{pgn:05X}",
+            f"PGN : 0x{pgn:05X} ({pgn})",
         ]
         app = self.app
         if isinstance(app, ExplorerApp):
@@ -234,9 +234,14 @@ class MessagesScreen(Static):
             description = pgndef.get("description", "")
             if description:
                 lines.append(f"{description}")
+        # DA only meaningful for PDU1 (PF < 240); otherwise skip
+        pf = (eid >> 16) & 0xFF
+        if pf < 240:
+            da = (eid >> 8) & 0xFF
+            lines.append(f"DA  : {da:02X}")
         lines.extend([
             f"SA  : {sa:02X}",
-            f"Raw : {hex_str}",
+            f"Data: {hex_str}",
         ])
         if isinstance(app, ExplorerApp):
             spns = extract_numeric_spns(eid, data, app.dictionary)
