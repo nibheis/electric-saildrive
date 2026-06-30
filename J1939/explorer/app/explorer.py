@@ -317,10 +317,13 @@ class ExplorerApp(App):
     CompactHeader {
         height: 1;
         text-style: bold;
+        background: white;
+        color: black;
     }
     CompactFooter {
         height: 1;
-        color: $text-muted;
+        background: white;
+        color: black;
     }
     StatsScreen, MessagesScreen, LiveScreen {
         width: 100%;
