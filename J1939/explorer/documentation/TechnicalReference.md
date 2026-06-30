@@ -204,7 +204,7 @@ while not stopped:
             return
 ```
 
-The PGN whitelist is built once at startup by `build_display_pgn_set(dictionary)`, which walks the JSON dictionary and collects PGNs whose top-level `"display"` flag is `true`. If a PGN is missing from the dictionary or has `display: false`, every CAN frame with that PGN is dropped **at the CAN thread level** before it ever reaches `J1939MessageStore`.
+The PGN **allowlist** is built once at startup by `build_display_pgn_set(dictionary)`, which walks the JSON dictionary and collects PGNs whose top-level `"display"` flag is `true`. If a PGN is missing from the dictionary or has `display: false`, every CAN frame with that PGN is dropped **at the CAN thread level** before it ever reaches `J1939MessageStore`.
 
 **Benefits:**
 - **Startup without interface** → `Disconnected`, retries every second until the interface appears.
@@ -496,7 +496,7 @@ Each SPN spec:
 1. **PGN level** — `display: false` on a PGN entry means **the entire CAN message is dropped** by `CANThread` before it reaches the store. The message does not appear in stats, Messages screen, or Live screen.
 2. **SPN level** — `display: false` on an SPN entry means only that individual parameter is hidden, but the parent message is still stored and other SPNs within it are still decoded.
 
-`build_display_pgn_set()` computes the PGN whitelist once at startup. Dictionary entries with `"display": false` (or missing `"display"`) are effectively invisible to the app.
+`build_display_pgn_set()` computes the PGN **allowlist** once at startup. Dictionary entries with `"display": false` (or missing `"display"`) are effectively invisible to the app.
 
 ---
 
@@ -602,7 +602,7 @@ class TestApp(ExplorerApp):
 | `J1939MessageStore` | `j1939_can.py` | Thread-safe cache + stats |
 | `CANThread` | `j1939_can.py` | Background reader from `python-can` |
 | `decode_spn()` | `j1939_can.py` | Extract numeric value from payload bytes |
-| `build_display_pgn_set()` | `j1939_can.py` | Compile whitelist of displayable PGNs from dictionary |
+| `build_display_pgn_set()` | `j1939_can.py` | Compile **allowlist** of displayable PGNs from dictionary |
 | `get_latest_data_and_ts_for_pgn()` | `j1939_can.py` | Return latest payload + timestamp for a PGN |
 | `extract_numeric_spns()` | `j1939_can.py` | Build display rows for a given message |
 | `spn_display_value()` | `j1939_can.py` | Format SPN value with unit/RAW/decimal heuristic |

@@ -123,7 +123,7 @@ Configure socketcan interface settings:
 - **`J1939MessageStore`** — Keeps the latest message per EID and a 15-second rolling timestamp window for rate calculations. All operations are thread-safe.
 - **`CANThread`** — Opens a `socketcan` bus using `python-can` and feeds incoming messages into the store. Automatically reconnects with a 1 s backoff if the link goes down or the interface is unavailable. Logs RAW frames before PGN filtering.
 - **`CANLogger`** — Thread-safe dump writer that logs every received CAN frame in `cansend` compatible format (e.g. `18F00400#1027FFFF`). Files are named `YYYYMMDD_HHmmss.dump`.
-- **`ReplayThread`** — Reads a dump file line by line and injects messages into `J1939MessageStore` at the configured delay, applying the same PGN whitelist as live traffic.
+- **`ReplayThread`** — Reads a dump file line by line and injects messages into `J1939MessageStore` at the configured delay, applying the same PGN **allowlist** as live traffic.
 - **`ExplorerApp`** — Loads `J1939_dictionnary.json` on startup. Refreshes the active screen every **500 ms** from the shared store.
 - **Dictionary filtering** — Two-level filtering:
   - **PGN level** — `display: false` drops the entire CAN message before it reaches the store.
