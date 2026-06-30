@@ -13,15 +13,16 @@ DEFAULTS: Dict[str, Any] = {
 
 
 def load_config() -> Dict[str, Any]:
-    """Load configuration from JSON, merging missing keys with defaults."""
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            config: Dict[str, Any] = json.load(f)
-        for key, default in DEFAULTS.items():
-            if key not in config:
-                config[key] = default
-        return config
-    return DEFAULTS.copy()
+    """Load configuration from JSON, creating default file if missing."""
+    if not os.path.exists(CONFIG_PATH):
+        save_config(DEFAULTS.copy())
+        return DEFAULTS.copy()
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        config: Dict[str, Any] = json.load(f)
+    for key, default in DEFAULTS.items():
+        if key not in config:
+            config[key] = default
+    return config
 
 
 def save_config(config: Dict[str, Any]) -> None:
