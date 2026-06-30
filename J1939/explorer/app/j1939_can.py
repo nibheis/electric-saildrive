@@ -3,6 +3,7 @@
 import json
 import os
 import struct
+import subprocess
 import threading
 import time
 from collections import defaultdict, deque
@@ -80,6 +81,19 @@ class J1939MessageStore:
     def on_disconnect(self):
         with self._lock:
             self._bus_connected = False
+
+    def check_link_status(self, iface: str = "can0") -> str:
+        """Check interface state via ip link."""
+        try:
+            result = subprocess.run(
+                ["ip", "link", "show", iface],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0:
+                return "UP" if "state UP" in result.stdout else "DOWN"
+        except Exception:
+            pass
+        return "UNKNOWN"
 
     def add(self, eid: int, data: bytes):
         t = time.time()

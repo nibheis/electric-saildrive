@@ -93,36 +93,38 @@ class CompactFooter(Static):
 class StatsScreen(Static):
     """Screen showing CAN bus activity statistics."""
 
+    _iface_name: str = "can0"
+
     def compose(self) -> ComposeResult:
         with Vertical(id="stats_container"):
-            yield Static("-- CAN Bus Stats --", classes="bold")
-            yield Static("Con: --", id="stats_connected")
-            yield Static("Up : --", id="stats_uptime")
-            yield Static("Tot: --", id="stats_total")
-            yield Static("Load: --", id="stats_bus_load")
+            yield Static(" CAN Bus ", classes="section_header")
+            yield Static("Link : --", id="stats_connected")
+            yield Static("Uptime: --", id="stats_uptime")
+            yield Static("Msgs : --", id="stats_total")
+            yield Static("Load : --", id="stats_bus_load")
             yield Static("")
-            yield Static("-- Activity --", classes="bold")
+            yield Static(" Activity ", classes="section_header")
             yield Static("1s : --", id="stats_1s")
             yield Static("5s : --", id="stats_5s")
             yield Static("15s: --", id="stats_15s")
             yield Static("")
-            yield Static("-- Unique --", classes="bold")
+            yield Static(" Unique ", classes="section_header")
             yield Static("EID: --", id="stats_count")
             yield Static("SA : --", id="stats_devices")
             yield Static("PGN: --", id="stats_pgns")
 
-    def update_stats(self, stats: Dict[str, Any]):
+    def update_stats(self, stats: Dict[str, Any], link_status: str = "UNKNOWN"):
         self.query_one("#stats_connected", Static).update(
-            f"Con: {'YES' if stats.get('connected') else 'NO'}"
+            f"Link : {link_status}"
         )
         self.query_one("#stats_uptime", Static).update(
-            f"Up : {int(stats['uptime'])}s"
+            f"Uptime: {int(stats['uptime'])}s"
         )
         self.query_one("#stats_total", Static).update(
-            f"Tot: {stats['total']}"
+            f"Msgs : {stats['total']}"
         )
         self.query_one("#stats_bus_load", Static).update(
-            f"Load:{stats['bus_load']:.1f}%"
+            f"Load : {stats['bus_load']:.1f}%"
         )
         rate = stats.get("rate", {})
         self.query_one("#stats_1s", Static).update(
@@ -674,6 +676,11 @@ class ExplorerApp(App):
     .bold {
         text-style: bold;
     }
+    .section_header {
+        text-style: bold;
+        background: grey;
+        color: white;
+    }
     #messages_vertical_container {
         width: 100%;
         height: 100%;
@@ -817,7 +824,9 @@ class ExplorerApp(App):
         if not self._frozen:
             mode = self.explorer_mode
             if mode == MODE_STATS:
-                self.query_one(f"#{MODE_STATS}", StatsScreen).update_stats(self.store.stats())
+                iface = self._config.get("socketcan_interface", "can0")
+                link = self.store.check_link_status(iface)
+                self.query_one(f"#{MODE_STATS}", StatsScreen).update_stats(self.store.stats(), link)
             elif mode == MODE_MESSAGES:
                 self.query_one(f"#{MODE_MESSAGES}", MessagesScreen).refresh_messages(self.store)
             elif mode == MODE_LIVE:
