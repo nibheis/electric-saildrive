@@ -31,7 +31,7 @@ class CANLogger:
             if self._active:
                 return self._path or ""
             os.makedirs(LOGS_DIR, exist_ok=True)
-            filename = f"candump_{datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
+            filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.dump"
             self._path = os.path.join(LOGS_DIR, filename)
             self._file = open(self._path, "w")
             self._active = True
