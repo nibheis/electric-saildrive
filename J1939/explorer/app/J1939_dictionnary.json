@@ -68,8 +68,8 @@
                 "nickname": "PGN",
                 "description": "REQUESTED PGN",
                 "display": true,
-                "bytes": [ 1, 2 ],
-                "unit": "dec",
+                "bytes": [ 0, 1 ],
+                "unit": "RAW",
                 "per_bit": 1,
                 "offset": 0
             }

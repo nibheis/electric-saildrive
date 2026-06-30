@@ -250,10 +250,22 @@ def decode_spn(data: bytes, spn_spec: Dict[str, Any]) -> Optional[float]:
     return val
 
 
+def _format_raw_hex(val: float, byte_indices: List[int]) -> str:
+    """Format a decoded value as hex with width matching byte count.
+
+    decode_spn() already interprets bytes as little-endian, so the numeric
+    value corresponds to the reversed byte order. We just print it as hex.
+    """
+    n = len(byte_indices)
+    return f"0x{int(val):0{n * 2}X}"
+
+
 def spn_display_value(spn_spec: Dict[str, Any], val: Optional[float]) -> str:
     if val is None:
         return "n/a"
     unit = spn_spec.get("unit", "")
+    if unit == "RAW":
+        return _format_raw_hex(val, spn_spec.get("bytes", []))
     fmt = "{:.2f}" if abs(val - round(val)) > 0.005 else "{:.0f}"
     return f"{fmt.format(val)} {unit}"
 
@@ -281,18 +293,15 @@ def extract_numeric_spns(eid: int, data: bytes, dictionary: Dict[str, Any]) -> L
                 continue
             val = decode_spn(data, spn_spec)
             if val is not None:
-                unit = spn_spec.get("unit", "")
-                fmt = "{:.2f}" if abs(val - round(val)) > 0.005 else "{:.0f}"
-                raw_val = val
-                value_str = f"{fmt.format(val)} {unit}"
+                value_str = spn_display_value(spn_spec, val)
                 label = f"{spn_spec.get('nickname', spn_id)} ({spn_spec.get('description', '')})"
                 results.append({
                     "spn_id": spn_id,
                     "nickname": spn_spec.get("nickname", spn_id),
                     "description": spn_spec.get("description", ""),
-                    "value": raw_val,
+                    "value": val,
                     "value_str": value_str,
-                    "unit": unit,
+                    "unit": spn_spec.get("unit", ""),
                 })
     return results
 

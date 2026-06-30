@@ -291,12 +291,17 @@ The table is fully cleared and rebuilt every tick, similar to the Messages table
 - Formula: `value = raw * per_bit + offset`
 - Returns `None` if indices are out of bounds or the length is unsupported.
 
-**Formatting rule used in the UI:**
-- If `abs(val - round(val)) > 0.005` → show 2 decimals (`{:.2f}`)
-- Otherwise → show integer (`{:.0f}`)
-- Append `unit` string.
+**Formatting rule used in the UI (`spn_display_value()`):**
+- If `unit == "RAW"` → display the value as `0xNNNN` hex, zero-padded to the byte count
+  (e.g. bytes 0-1 containing `0xEA 0xFE` → `0xFEEA`).
+- Otherwise, numeric formatting applies:
+  - If `abs(val - round(val)) > 0.005` → show 2 decimals (`{:.2f}`)
+  - Otherwise → show integer (`{:.0f}`)
+  - Append `unit` string.
 
 This heuristic keeps temperatures like `85.0°C` from showing as `85.00°C` while preserving fractional scales such as `0.03125`.
+
+**Why hex reversal for RAW?**  `decode_spn()` already interprets the listed bytes as little-endian, so the numeric value `0xFEEA` naturally represents `[0xEA, 0xFE]`. `_format_raw_hex()` just prints that value back as hex with correct width (`0xFEEA` for 2 bytes, `0x0012C0` for 3 bytes, etc.).
 
 ---
 
@@ -323,7 +328,7 @@ Each SPN spec:
 | `description` | string | Long description |
 | `display` | boolean | Whether this SPN appears in UI |
 | `bytes` | list[int] | Byte indices in the CAN payload |
-| `unit` | string | Unit suffix (e.g. `"°C"`, `"rpm"`) |
+| `unit` | string | Unit suffix (e.g. `"°C"`, `"rpm"`). Special value `"RAW"` → display as `0xNNNN` hex instead of a formatted number. |
 | `per_bit` | float | Scale factor |
 | `offset` | float | Zero offset |
 
