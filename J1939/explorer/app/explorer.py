@@ -501,18 +501,33 @@ class LoggingScreen(Static):
     """Screen showing log files and replay controls."""
 
     _file_list: List[str] = []
+    _file_sizes: List[int] = []
 
     def compose(self) -> ComposeResult:
         with Vertical(id="logs_container"):
             yield Static("-- Log Files --", classes="bold")
-            yield DataTable(show_header=False, show_cursor=True, cursor_type="row", zebra_stripes=True, id="logs_table")
+            yield DataTable(
+                show_header=False, show_cursor=True, cursor_type="row",
+                zebra_stripes=True, id="logs_table"
+            )
             yield Static("")
-            yield Static("[p] Replay  [d] Delete", id="logs_help")
+            with Horizontal(id="logs_buttons"):
+                yield Button("Replay", id="logs_replay_btn", variant="primary")
+                yield Button("Delete", id="logs_delete_btn", variant="error")
 
     def on_mount(self):
         table = self.query_one("#logs_table", DataTable)
-        table.add_column("File", width=26)
+        table.add_column("File", width=22)
         table.add_column("Size", width=8)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        app = self.app
+        if not isinstance(app, ExplorerApp):
+            return
+        if event.button.id == "logs_replay_btn":
+            app._replay_selected_log()
+        elif event.button.id == "logs_delete_btn":
+            app._delete_selected_log()
 
     @property
     def table(self) -> DataTable:
@@ -521,8 +536,8 @@ class LoggingScreen(Static):
     def _needs_rebuild(self, current_files: List[tuple]) -> bool:
         if len(current_files) != len(self._file_list):
             return True
-        for i, (name, _, _) in enumerate(current_files):
-            if name != self._file_list[i]:
+        for i, (name, size, _) in enumerate(current_files):
+            if name != self._file_list[i] or size != self._file_sizes[i]:
                 return True
         return False
 
@@ -536,10 +551,12 @@ class LoggingScreen(Static):
 
         self.table.clear()
         self._file_list = []
+        self._file_sizes = []
         for name, size, _mtime in current_files:
             size_kb = size / 1024
             self.table.add_row(name, f"{size_kb:.1f}kB", key=name)
             self._file_list.append(name)
+            self._file_sizes.append(size)
 
         # Restore cursor by filename
         if selected is not None and selected in self._file_list:
@@ -550,10 +567,25 @@ class LoggingScreen(Static):
         elif self._file_list:
             self.table.move_cursor(row=0, animate=False)
 
+    def _update_sizes(self, current_files: List[tuple]):
+        """Update Size column in-place without touching cursor."""
+        from textual.coordinate import Coordinate
+        for i, (name, size, _) in enumerate(current_files):
+            if i >= len(self._file_list) or name != self._file_list[i]:
+                break
+            size_kb = size / 1024
+            self.table.update_cell_at(
+                Coordinate(row=i, column=1),
+                f"{size_kb:.1f}kB"
+            )
+            self._file_sizes[i] = size
+
     def refresh_files(self):
         files = CANLogger().list_files()
         if self._needs_rebuild(files):
             self._rebuild_table(files)
+        else:
+            self._update_sizes(files)
 
     def selected_file(self) -> Optional[str]:
         cursor = self.table.cursor_row
@@ -609,6 +641,9 @@ class ExplorerApp(App):
     #logs_table {
         width: 100%;
         height: 1fr;
+    }
+    #logs_buttons {
+        height: auto;
     }
     """
 
@@ -666,12 +701,6 @@ class ExplorerApp(App):
         if event.key == "q":
             event.stop()
             self.exit()
-        # Replay / Delete shortcuts only on logs screen
-        if self.explorer_mode == MODE_LOGS:
-            if event.key == "p":
-                self._replay_selected_log()
-            elif event.key == "d":
-                self._delete_selected_log()
 
     def action_switch_mode(self, mode: str):
         self._set_mode(mode)
