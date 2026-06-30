@@ -53,10 +53,17 @@ class CompactHeader(Static):
 # ---------------------------------------------------------------------------
 
 class CompactFooter(Static):
-    """Single line footer with short key bindings."""
+    """Single line footer with short key bindings (keys in green)."""
 
     def compose(self) -> ComposeResult:
-        yield Static("F1:S F2:M F3:L Spc:Frz Q:Qt")
+        text = Text.assemble(
+            ("F1", "green"), ":S ",
+            ("F2", "green"), ":M ",
+            ("F3", "green"), ":L ",
+            ("Spc", "green"), ":Frz ",
+            ("Q", "green"), ":Qt",
+        )
+        yield Static(text)
 
 # ---------------------------------------------------------------------------
 # Stats screen (tight layout for 40 cols)
