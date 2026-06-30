@@ -609,7 +609,7 @@ class ExplorerApp(App):
         self._frozen: bool = False
         self._display_pgns: set = set()
         self._config: Dict[str, Any] = {}
-        self._logger = CANLogger()
+        self._can_logger = CANLogger()
         self._replay_thread: Optional[ReplayThread] = None
         self._replay_active = False
 
@@ -632,8 +632,8 @@ class ExplorerApp(App):
         self._update_timer = self.set_interval(0.5, self._tick)
 
     def on_unmount(self):
-        if self._logger.is_active():
-            self._logger.stop()
+        if self._can_logger.is_active():
+            self._can_logger.stop()
         if self.can_thread is not None:
             self.can_thread.stop()
             self.can_thread.join(timeout=1.0)
@@ -661,11 +661,11 @@ class ExplorerApp(App):
             self.notify("Resumed", severity="information", timeout=1)
 
     def action_toggle_logging(self):
-        if self._logger.is_active():
-            self._logger.stop()
+        if self._can_logger.is_active():
+            self._can_logger.stop()
             self.notify("Logging stopped", severity="information", timeout=1)
         else:
-            path = self._logger.start()
+            path = self._can_logger.start()
             self.notify(f"Logging to {os.path.basename(path)}", severity="information", timeout=2)
         self._update_header()
 
@@ -700,7 +700,7 @@ class ExplorerApp(App):
             self.explorer_mode,
             connected,
             self._frozen,
-            self._logger.is_active(),
+            self._can_logger.is_active(),
         )
 
     def _start_can(self):
@@ -708,7 +708,7 @@ class ExplorerApp(App):
             channel=self._channel,
             store=self.store,
             display_pgns=self._display_pgns,
-            logger=self._logger,
+            logger=self._can_logger,
         )
         self.can_thread.start()
 
