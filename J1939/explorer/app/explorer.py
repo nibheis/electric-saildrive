@@ -344,14 +344,15 @@ class ConfigScreen(Static):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="config_container"):
-            yield Static("-- Interface Status --", classes="bold")
+            yield Static(" Interface ", classes="section_header")
             yield Static("Status: --", id="config_interface_status")
             yield Static("")
-            yield Static("-- Settings --", classes="bold")
+            yield Static(" Settings ", classes="section_header")
             yield Static("Iface: can0", id="config_iface_value")
             yield Static("Bitrt: 250000", id="config_bitrate_value")
             yield Static("Delay: 500ms", id="config_delay_value")
-            yield Static("-- Edit --", classes="bold")
+            yield Static("")
+            yield Static(" Edit ", classes="section_header")
             yield Input(
                 placeholder="Interface",
                 id="config_iface_input",
@@ -365,10 +366,12 @@ class ConfigScreen(Static):
                 id="config_delay_input",
             )
             yield Static("")
-            yield Button("Apply", id="config_apply_btn", variant="primary")
-            yield Button("Revert", id="config_revert_btn", variant="default")
-            yield Button("Set UP", id="config_up_btn", variant="success")
-            yield Button("Set DOWN", id="config_down_btn", variant="warning")
+            with Horizontal(id="config_row1"):
+                yield Button("Apply", id="config_apply_btn", variant="primary")
+                yield Button("Revert", id="config_revert_btn", variant="default")
+            with Horizontal(id="config_row2"):
+                yield Button("Set UP", id="config_up_btn", variant="success")
+                yield Button("Set DOWN", id="config_down_btn", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "config_apply_btn":
@@ -704,6 +707,12 @@ class ExplorerApp(App):
     }
     #config_container {
         padding: 0 1;
+    }
+    #config_row1, #config_row2 {
+        height: auto;
+    }
+    #config_row1 Button, #config_row2 Button {
+        width: 1fr;
     }
     #logs_container {
         padding: 0 1;
