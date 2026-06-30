@@ -67,7 +67,7 @@ class StatsScreen(Static):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="stats_container"):
-            yield Static("BUS STATS", classes="bold")
+            yield Static("-- CAN Bus Stats --", classes="bold")
             yield Static("Con: --", id="stats_connected")
             yield Static("Up : --", id="stats_uptime")
             yield Static("Tot: --", id="stats_total")
