@@ -42,5 +42,21 @@
                 "offset": 0
             }
         }
+    },
+    "65253": {
+        "nickname": "HOURS",
+        "description": "ENGINE HOURS",
+        "display": true,
+        "spns": {
+            "247": {
+                "nickname": "TH",
+                "description": "TOTAL ENGINE HOURS",
+                "display": true,
+                "bytes": [ 1, 2, 3, 4 ],
+                "unit": "hrs",
+                "per_bit": 0.05,
+                "offset": 0
+            }
+        }
     }
 }

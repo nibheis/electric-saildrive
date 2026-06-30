@@ -274,8 +274,10 @@ The table is fully cleared and rebuilt every tick, similar to the Messages table
 - Reads `spn_spec["bytes"]` to know which byte indices to extract.
 - **1 byte:** direct unsigned value.
 - **2 bytes:** little-endian (`byte0 | (byte1 << 8)`).
+- **4 bytes:** little-endian (`byte0 | (byte1 << 8) | (byte2 << 16) | (byte3 << 24)`).
+- All lengths validate that each listed index is within the payload bounds.
 - Formula: `value = raw * per_bit + offset`
-- Returns `None` if indices are out of bounds.
+- Returns `None` if indices are out of bounds or the length is unsupported.
 
 **Formatting rule used in the UI:**
 - If `abs(val - round(val)) > 0.005` → show 2 decimals (`{:.2f}`)
@@ -369,7 +371,7 @@ class TestApp(ExplorerApp):
 |---|---|---|
 | **Table rebuild** | Incremental updates with cursor preservation | ✅ Done |
 | **Header state** | Old: plain text with `[F]` tag. New: single-letter coloured indicators (`C`/`D` for connection, `.`/`F` for freeze) | ✅ Done |
-| **SPN size** | Only 1-byte and 2-byte SPNs supported | Add 3-byte, 4-byte, bit-field decoding |
+| **SPN size** | 1, 2, and 4-byte little-endian SPNs supported | Add 3-byte and bit-field decoding |
 | **Endianness** | Assumes little-endian | Support big-endian flag in dictionary |
 | **CAN interface** | Hard-coded `socketcan` | Make interface type configurable (e.g. `pcan`, `virtual`) |
 | **Error handling** | Auto-reconnects with 1 s backoff; only shows `Connected: YES/NO` | Show error banner / last error message in UI |

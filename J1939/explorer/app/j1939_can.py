@@ -198,25 +198,35 @@ class CANThread(threading.Thread):
 # ---------------------------------------------------------------------------
 
 def decode_spn(data: bytes, spn_spec: Dict[str, Any]) -> Optional[float]:
-    """Decode a single SPN from the CAN payload."""
+    """Decode a single SPN from the CAN payload.
+
+    Supports 1-byte, 2-byte, and 4-byte little-endian fields.
+    """
     byte_indices = spn_spec.get("bytes", [])
     if not byte_indices:
         return None
-    if len(byte_indices) == 1:
-        idx = byte_indices[0]
+
+    # Validate all indices within bounds
+    for idx in byte_indices:
         if idx < 0 or idx >= len(data):
             return None
-        raw = data[idx]
-        val = raw * spn_spec.get("per_bit", 1.0) + spn_spec.get("offset", 0.0)
-    elif len(byte_indices) == 2:
-        idx0, idx1 = byte_indices[0], byte_indices[1]
-        if idx0 < 0 or idx1 < 0 or idx0 >= len(data) or idx1 >= len(data):
-            return None
-        # little endian assumed
-        raw = data[idx0] | (data[idx1] << 8)
-        val = raw * spn_spec.get("per_bit", 1.0) + spn_spec.get("offset", 0.0)
+
+    n = len(byte_indices)
+    if n == 1:
+        raw = data[byte_indices[0]]
+    elif n == 2:
+        raw = data[byte_indices[0]] | (data[byte_indices[1]] << 8)
+    elif n == 4:
+        raw = (
+            data[byte_indices[0]]
+            | (data[byte_indices[1]] << 8)
+            | (data[byte_indices[2]] << 16)
+            | (data[byte_indices[3]] << 24)
+        )
     else:
         return None
+
+    val = raw * spn_spec.get("per_bit", 1.0) + spn_spec.get("offset", 0.0)
     return val
 
 
