@@ -8,6 +8,7 @@ from rich.text import Text
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
+from textual.events import Key
 from textual.widgets import DataTable, Static, Input, Button
 
 from .j1939_can import (
@@ -518,7 +519,7 @@ class ExplorerApp(App):
             self.can_thread.stop()
             self.can_thread.join(timeout=1.0)
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: Key) -> None:
         if event.key == "q":
             event.stop()
             self.exit()
