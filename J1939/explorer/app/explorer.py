@@ -343,6 +343,7 @@ class ConfigScreen(Static):
             yield Static("-- Settings --", classes="bold")
             yield Static("Iface: can0", id="config_iface_value")
             yield Static("Bitrt: 250000", id="config_bitrate_value")
+            yield Static("Delay: 500ms", id="config_delay_value")
             yield Static("-- Edit --", classes="bold")
             yield Input(
                 placeholder="Interface",
@@ -351,6 +352,10 @@ class ConfigScreen(Static):
             yield Input(
                 placeholder="Bitrate (bps)",
                 id="config_bitrate_input",
+            )
+            yield Input(
+                placeholder="Replay delay (ms)",
+                id="config_delay_input",
             )
             yield Static("")
             yield Button("Apply", id="config_apply_btn", variant="primary")
@@ -370,11 +375,17 @@ class ConfigScreen(Static):
         self.query_one("#config_bitrate_input", Input).value = str(
             config.get("can_bitrate", 250000)
         )
+        self.query_one("#config_delay_input", Input).value = str(
+            config.get("replay_delay", 500)
+        )
         self.query_one("#config_iface_value", Static).update(
             f"Iface: {config.get('socketcan_interface', 'can0')}"
         )
         self.query_one("#config_bitrate_value", Static).update(
             f"Bitrt: {config.get('can_bitrate', 250000)}"
+        )
+        self.query_one("#config_delay_value", Static).update(
+            f"Delay: {config.get('replay_delay', 500)}ms"
         )
         self._update_status()
 
@@ -400,14 +411,17 @@ class ConfigScreen(Static):
     def apply_config(self):
         iface = self.query_one("#config_iface_input", Input).value.strip()
         bitrate_str = self.query_one("#config_bitrate_input", Input).value.strip()
+        delay_str = self.query_one("#config_delay_input", Input).value.strip()
         try:
             bitrate = int(bitrate_str)
+            delay = int(delay_str)
         except ValueError:
             if self.app:
-                self.app.notify("Invalid bitrate", severity="error", timeout=2)
+                self.app.notify("Invalid numeric value", severity="error", timeout=2)
             return
         self._config["socketcan_interface"] = iface
         self._config["can_bitrate"] = bitrate
+        self._config["replay_delay"] = delay
         try:
             subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
             subprocess.run(
@@ -422,6 +436,7 @@ class ConfigScreen(Static):
         save_config(self._config)
         self.query_one("#config_iface_value", Static).update(f"Iface: {iface}")
         self.query_one("#config_bitrate_value", Static).update(f"Bitrt: {bitrate}")
+        self.query_one("#config_delay_value", Static).update(f"Delay: {delay}ms")
         if self.app:
             self.app.notify("Settings applied", severity="information", timeout=2)
         self._update_status()
@@ -435,11 +450,17 @@ class ConfigScreen(Static):
         self.query_one("#config_bitrate_input", Input).value = str(
             new_config.get("can_bitrate", 250000)
         )
+        self.query_one("#config_delay_input", Input).value = str(
+            new_config.get("replay_delay", 500)
+        )
         self.query_one("#config_iface_value", Static).update(
             f"Iface: {new_config.get('socketcan_interface', 'can0')}"
         )
         self.query_one("#config_bitrate_value", Static).update(
             f"Bitrt: {new_config.get('can_bitrate', 250000)}"
+        )
+        self.query_one("#config_delay_value", Static).update(
+            f"Delay: {new_config.get('replay_delay', 500)}ms"
         )
         self._update_status()
         if self.app:
@@ -457,11 +478,13 @@ class ReplayThread(threading.Thread):
         self,
         filepath: str,
         store: J1939MessageStore,
+        delay_ms: int = 500,
         on_done: Optional[Any] = None,
     ):
         super().__init__(daemon=True)
         self.filepath = filepath
         self.store = store
+        self.delay_ms = delay_ms
         self._stop = threading.Event()
         self._on_done = on_done
 
@@ -473,6 +496,7 @@ class ReplayThread(threading.Thread):
             if self._on_done:
                 self._on_done()
             return
+        delay_s = self.delay_ms / 1000.0
         for line in lines:
             if self._stop.is_set():
                 break
@@ -483,8 +507,7 @@ class ReplayThread(threading.Thread):
                 self.store.add(eid, data)
             except (ValueError, IndexError):
                 continue
-            # 500 ms between messages
-            if self._stop.wait(0.5):
+            if self._stop.wait(delay_s):
                 break
         if self._on_done:
             self._on_done()
@@ -803,7 +826,10 @@ class ExplorerApp(App):
             self._update_header()
             self.notify("Replay done", severity="information", timeout=1)
 
-        self._replay_thread = ReplayThread(filepath, self.store, on_done=on_replay_done)
+        delay_ms = self._config.get("replay_delay", 500)
+        self._replay_thread = ReplayThread(
+            filepath, self.store, delay_ms=delay_ms, on_done=on_replay_done
+        )
         self._replay_thread.start()
 
     def _delete_selected_log(self):

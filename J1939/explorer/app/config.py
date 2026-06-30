@@ -9,6 +9,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configuration.json")
 DEFAULTS: Dict[str, Any] = {
     "socketcan_interface": "can0",
     "can_bitrate": 250000,
+    "replay_delay": 500,
 }
 
 
