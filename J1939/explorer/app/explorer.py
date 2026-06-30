@@ -70,7 +70,8 @@ class StatsScreen(Static):
             yield Static("BUS STATS", classes="bold")
             yield Static("Con: --", id="stats_connected")
             yield Static("Up : --", id="stats_uptime")
-            yield Static("Tot: --", id="stats_count")
+            yield Static("Tot: --", id="stats_total")
+            yield Static("Load: --", id="stats_bus_load")
             yield Static("")
             yield Static("-- Activity --", classes="bold")
             yield Static("1s : --", id="stats_1s")
@@ -78,6 +79,7 @@ class StatsScreen(Static):
             yield Static("15s: --", id="stats_15s")
             yield Static("")
             yield Static("-- Unique --", classes="bold")
+            yield Static("EID: --", id="stats_count")
             yield Static("SA : --", id="stats_devices")
             yield Static("PGN: --", id="stats_pgns")
 
@@ -88,8 +90,11 @@ class StatsScreen(Static):
         self.query_one("#stats_uptime", Static).update(
             f"Up : {int(stats['uptime'])}s"
         )
-        self.query_one("#stats_count", Static).update(
-            f"Tot: {stats['count']}"
+        self.query_one("#stats_total", Static).update(
+            f"Tot: {stats['total']}"
+        )
+        self.query_one("#stats_bus_load", Static).update(
+            f"Load:{stats['bus_load']:.1f}%"
         )
         rate = stats.get("rate", {})
         self.query_one("#stats_1s", Static).update(
@@ -100,6 +105,9 @@ class StatsScreen(Static):
         )
         self.query_one("#stats_15s", Static).update(
             f"15s: {rate.get('15s', 0.0):.1f}"
+        )
+        self.query_one("#stats_count", Static).update(
+            f"EID: {stats['count']}"
         )
         self.query_one("#stats_devices", Static).update(
             f"SA : {stats['devices']}"

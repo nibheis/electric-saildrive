@@ -75,9 +75,14 @@ self.timestamps_window: deque    # list of (timestamp, eid), pruned to 15 s
 **Why only the latest message per EID?**  The UI shows the current snapshot; history is only needed for rates.
 
 ### Stats computation (inside lock)
-- `rate["1s"]`  = count of timestamps in the last 1 second
-- `rate["5s"]`  = count in last 5 seconds / 5.0
-- `rate["15s"]` = total deque length / 15.0
+- `total`         = monotonic counter of all accepted CAN frames since start
+- `count`         = number of unique EIDs currently in the store
+- `rate["1s"]`   = count of timestamps in the last 1 second
+- `rate["5s"]`   = count in last 5 seconds / 5.0
+- `rate["15s"]`  = total deque length / 15.0
+- `bus_load`     = 1-second rate as a percentage of theoretical 250 kbps bus capacity
+  - Worst-case frame with stuff bits ≈ 160 µs → max ~7812 msg/s
+  - `bus_load = (rate_1s / 7812) * 100.0`, capped at 100%
 
 ---
 
@@ -96,7 +101,7 @@ ExplorerApp (Screen)
 │       ├── Static ("Detail")
 │       └── Static (detail text, full width)
 ├── LiveScreen (Static, id="live")
-│   └── DataTable (columns: PGN=7, SPN=8, Value=10)
+│   └── DataTable (columns: PGN=7, SPN=8, Value=10, Age=5)
 └── CompactFooter (id="footer", single line)
 ```
 

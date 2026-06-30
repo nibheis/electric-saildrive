@@ -71,6 +71,7 @@ class J1939MessageStore:
         self.timestamps_window = deque()  # (ts, eid)
         self._start = time.time()
         self._bus_connected = False
+        self._total_messages: int = 0
 
     def on_connect(self):
         with self._lock:
@@ -84,6 +85,7 @@ class J1939MessageStore:
         t = time.time()
         hex_str = " ".join(f"{b:02X}" for b in data)
         with self._lock:
+            self._total_messages += 1
             self.messages[eid] = {"ts": t, "data": data, "hex": hex_str}
             self.timestamps_window.append((t, eid))
             # prune old timestamps > 15s
@@ -147,11 +149,18 @@ class J1939MessageStore:
                 unique_sa.add(sa)
                 unique_pgn.add(pgn)
 
+            # J1939 at 250 kbps: worst-case frame with stuff bits ~ 160 µs
+            # practical ceiling ≈ 1 frame / 128 µs = ~7812 msg/s
+            BUS_MAX_MSGS_PER_SEC = 7812
+            bus_load = min(100.0, (cnt_1 / BUS_MAX_MSGS_PER_SEC) * 100.0)
+
             return {
                 "connected": self._bus_connected,
                 "uptime": now - self._start,
                 "count": len(self.messages),
+                "total": self._total_messages,
                 "rate": msgs_per_sec,
+                "bus_load": bus_load,
                 "devices": len(unique_sa),
                 "pgns": len(unique_pgn),
             }
