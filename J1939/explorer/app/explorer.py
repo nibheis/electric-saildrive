@@ -4,7 +4,7 @@ import os
 import subprocess
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from rich.text import Text
 
@@ -497,12 +497,14 @@ class ReplayThread(threading.Thread):
         self,
         filepath: str,
         store: J1939MessageStore,
+        display_pgns: Optional[Set[int]] = None,
         delay_ms: int = 500,
         on_done: Optional[Any] = None,
     ):
         super().__init__(daemon=True)
         self.filepath = filepath
         self.store = store
+        self.display_pgns = display_pgns or set()
         self.delay_ms = delay_ms
         self._stop = threading.Event()
         self._on_done = on_done
@@ -523,6 +525,11 @@ class ReplayThread(threading.Thread):
                 eid_str, payload_hex = line.split("#", 1)
                 eid = int(eid_str, 16)
                 data = bytes.fromhex(payload_hex)
+                # Apply same PGN filtering as live CAN thread
+                if self.display_pgns:
+                    _, _, _, pgn, _ = parse_eid(eid)
+                    if pgn not in self.display_pgns:
+                        continue
                 self.store.add(eid, data)
             except (ValueError, IndexError):
                 continue
@@ -828,12 +835,6 @@ class ExplorerApp(App):
             self.notify("No file selected", severity="warning", timeout=1)
             return
         filepath = CANLogger().file_path(filename)
-        # Bring socketcan down before replay
-        iface = self._config.get("socketcan_interface", "can0")
-        try:
-            subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
-        except subprocess.CalledProcessError:
-            pass
         # Mark replay active (shows 'R' in header)
         self._replay_active = True
         self._update_header()
@@ -846,7 +847,11 @@ class ExplorerApp(App):
 
         delay_ms = self._config.get("replay_delay", 500)
         self._replay_thread = ReplayThread(
-            filepath, self.store, delay_ms=delay_ms, on_done=on_replay_done
+            filepath,
+            self.store,
+            display_pgns=self._display_pgns,
+            delay_ms=delay_ms,
+            on_done=on_replay_done,
         )
         self._replay_thread.start()
 
