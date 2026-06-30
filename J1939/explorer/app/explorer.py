@@ -105,13 +105,13 @@ class StatsScreen(Static):
         )
         rate = stats.get("rate", {})
         self.query_one("#stats_1s", Static).update(
-            f"1s : {rate.get('1s', 0.0):.1f}"
+            f"1s : {rate.get('1s', 0.0):.1f} msg/s"
         )
         self.query_one("#stats_5s", Static).update(
-            f"5s : {rate.get('5s', 0.0):.1f}"
+            f"5s : {rate.get('5s', 0.0):.1f} msg/s"
         )
         self.query_one("#stats_15s", Static).update(
-            f"15s: {rate.get('15s', 0.0):.1f}"
+            f"15s: {rate.get('15s', 0.0):.1f} msg/s"
         )
         self.query_one("#stats_count", Static).update(
             f"EID: {stats['count']}"
