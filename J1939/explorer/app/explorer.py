@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """J1939 Explorer — Terminal app for live CAN bus analysis (40×40)."""
+import subprocess
 import time
 from typing import Any, Dict, List, Optional
 
@@ -7,7 +8,7 @@ from rich.text import Text
 
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable, Static, Input
 
 from .j1939_can import (
     parse_eid,
@@ -20,6 +21,7 @@ from .j1939_can import (
     decode_spn,
     spn_display_value,
 )
+from .config import load_config, save_config
 
 # ---------------------------------------------------------------------------
 # App constants
@@ -27,6 +29,7 @@ from .j1939_can import (
 MODE_STATS = "stats"
 MODE_MESSAGES = "messages"
 MODE_LIVE = "live"
+MODE_CONFIG = "config"
 
 # ---------------------------------------------------------------------------
 # Compact header (replaces Textual Header widget)
@@ -60,6 +63,7 @@ class CompactFooter(Static):
             ("F1", "green"), ":S ",
             ("F2", "green"), ":M ",
             ("F3", "green"), ":L ",
+            ("F5", "green"), ":Cfg ",
             ("Spc", "green"), ":Frz ",
             ("Q", "green"), ":Qt",
         )
@@ -309,6 +313,111 @@ class LiveScreen(Static):
 
 
 # ---------------------------------------------------------------------------
+# Config screen
+# ---------------------------------------------------------------------------
+
+class ConfigScreen(Static):
+    """Screen to configure socketcan interface and bitrate."""
+
+    _config: Dict[str, Any] = {}
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="config_container"):
+            yield Static("-- Interface Status --", classes="bold")
+            yield Static("Status: --", id="config_interface_status")
+            yield Static("")
+            yield Static("-- Settings --", classes="bold")
+            with Horizontal(id="config_iface_row"):
+                yield Static("Iface     :", id="config_iface_label")
+                yield Input(value="can0", id="config_iface_input")
+            with Horizontal(id="config_bitrate_row"):
+                yield Static("Bitrate   :", id="config_bitrate_label")
+                yield Input(value="250000", id="config_bitrate_input")
+            yield Static("")
+            with Horizontal(id="config_buttons"):
+                yield Static("[A] Apply", id="config_apply_btn")
+                yield Static("[R] Revert", id="config_revert_btn")
+
+    def on_mount(self):
+        self.query_one("#config_iface_input", Input).focus()
+
+    def refresh_config(self, config: Dict[str, Any]):
+        self._config = config
+        self.query_one("#config_iface_input", Input).value = str(
+            config.get("socketcan_interface", "can0")
+        )
+        self.query_one("#config_bitrate_input", Input).value = str(
+            config.get("can_bitrate", 250000)
+        )
+        self._update_status()
+
+    def _check_interface(self) -> str:
+        iface = self._config.get("socketcan_interface", "can0")
+        try:
+            result = subprocess.run(
+                ["ip", "link", "show", iface],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0:
+                return "UP" if "state UP" in result.stdout else "DOWN"
+        except Exception:
+            pass
+        return "UNKNOWN"
+
+    def _update_status(self):
+        status = self._check_interface()
+        self.query_one("#config_interface_status", Static).update(
+            f"Status: {status}"
+        )
+
+    def apply_config(self):
+        iface = self.query_one("#config_iface_input", Input).value.strip()
+        bitrate_str = self.query_one("#config_bitrate_input", Input).value.strip()
+        try:
+            bitrate = int(bitrate_str)
+        except ValueError:
+            if self.app:
+                self.app.notify("Invalid bitrate", severity="error", timeout=2)
+            return
+        self._config["socketcan_interface"] = iface
+        self._config["can_bitrate"] = bitrate
+        try:
+            subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
+            subprocess.run(
+                ["sudo", "ip", "link", "set", iface, "type", "can", "bitrate", str(bitrate)],
+                check=True,
+            )
+            subprocess.run(["sudo", "ip", "link", "set", "up", iface], check=True)
+        except subprocess.CalledProcessError as exc:
+            if self.app:
+                self.app.notify(f"Interface error: {exc}", severity="error", timeout=3)
+            return
+        save_config(self._config)
+        if self.app:
+            self.app.notify("Settings applied", severity="information", timeout=2)
+        self._update_status()
+
+    def revert_config(self):
+        new_config = load_config()
+        self._config = new_config
+        self.query_one("#config_iface_input", Input).value = str(
+            new_config.get("socketcan_interface", "can0")
+        )
+        self.query_one("#config_bitrate_input", Input).value = str(
+            new_config.get("can_bitrate", 250000)
+        )
+        self._update_status()
+        if self.app:
+            self.app.notify("Settings reverted", severity="information", timeout=2)
+
+    def on_key(self, event):
+        if event.key == "a":
+            self.apply_config()
+        elif event.key == "r":
+            self.revert_config()
+
+
+# ---------------------------------------------------------------------------
 # Main App
 # ---------------------------------------------------------------------------
 
@@ -332,7 +441,7 @@ class ExplorerApp(App):
         background: white;
         color: black;
     }
-    StatsScreen, MessagesScreen, LiveScreen {
+    StatsScreen, MessagesScreen, LiveScreen, ConfigScreen {
         width: 100%;
         height: 1fr;
     }
@@ -346,12 +455,16 @@ class ExplorerApp(App):
     #stats_container {
         padding: 0 1;
     }
+    #config_container {
+        padding: 0 1;
+    }
     """
 
     BINDINGS = [
         ("f1", "switch_mode('stats')", ""),
         ("f2", "switch_mode('messages')", ""),
         ("f3", "switch_mode('live')", ""),
+        ("f5", "switch_mode('config')", ""),
         ("space", "toggle_freeze", ""),
         ("q", "quit", ""),
     ]
@@ -372,11 +485,13 @@ class ExplorerApp(App):
         yield StatsScreen(id=MODE_STATS)
         yield MessagesScreen(id=MODE_MESSAGES)
         yield LiveScreen(id=MODE_LIVE)
+        yield ConfigScreen(id=MODE_CONFIG)
         yield CompactFooter(id="footer")
 
     def on_mount(self):
         self.dictionary = load_dictionary(DICT_PATH)
         self._display_pgns = build_display_pgn_set(self.dictionary)
+        self._config = load_config()
         self.title = "J1939"
         self._set_mode(MODE_STATS)
         self._start_can()
@@ -400,13 +515,18 @@ class ExplorerApp(App):
 
     def _set_mode(self, mode: str):
         self.explorer_mode = mode
-        for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE):
+        for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE, MODE_CONFIG):
             screen = self.query_one(f"#{m}", Static)
             screen.display = (m == mode)
         # Restore focus to the DataTable when returning to Messages screen
         if mode == MODE_MESSAGES:
             messages_screen = self.query_one(f"#{MODE_MESSAGES}", MessagesScreen)
             messages_screen.table.focus()
+        elif mode == MODE_CONFIG:
+            config_screen = self.query_one(f"#{MODE_CONFIG}", ConfigScreen)
+            config_screen.refresh_config(self._config)
+            iface_input = config_screen.query_one("#config_iface_input", Input)
+            iface_input.focus()
         self._update_header()
 
     def _update_header(self):
