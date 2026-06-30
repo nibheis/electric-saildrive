@@ -1,0 +1,4 @@
+{
+    "socketcan_interface": "can0",
+    "can_bitrate": 250000
+}

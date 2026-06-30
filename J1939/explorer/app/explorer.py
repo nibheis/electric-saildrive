@@ -7,8 +7,9 @@ from typing import Any, Dict, List, Optional
 from rich.text import Text
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, Horizontal
-from textual.widgets import DataTable, Static, Input
+from textual.widgets import DataTable, Static, Input, Button
 
 from .j1939_can import (
     parse_eid,
@@ -335,11 +336,14 @@ class ConfigScreen(Static):
                 yield Input(value="250000", id="config_bitrate_input")
             yield Static("")
             with Horizontal(id="config_buttons"):
-                yield Static("[A] Apply", id="config_apply_btn")
-                yield Static("[R] Revert", id="config_revert_btn")
+                yield Button("Apply", id="config_apply_btn", variant="primary")
+                yield Button("Revert", id="config_revert_btn", variant="default")
 
-    def on_mount(self):
-        self.query_one("#config_iface_input", Input).focus()
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "config_apply_btn":
+            self.apply_config()
+        elif event.button.id == "config_revert_btn":
+            self.revert_config()
 
     def refresh_config(self, config: Dict[str, Any]):
         self._config = config
@@ -410,12 +414,6 @@ class ConfigScreen(Static):
         if self.app:
             self.app.notify("Settings reverted", severity="information", timeout=2)
 
-    def on_key(self, event):
-        if event.key == "a":
-            self.apply_config()
-        elif event.key == "r":
-            self.revert_config()
-
 
 # ---------------------------------------------------------------------------
 # Main App
@@ -461,12 +459,12 @@ class ExplorerApp(App):
     """
 
     BINDINGS = [
-        ("f1", "switch_mode('stats')", ""),
-        ("f2", "switch_mode('messages')", ""),
-        ("f3", "switch_mode('live')", ""),
-        ("f5", "switch_mode('config')", ""),
-        ("space", "toggle_freeze", ""),
-        ("q", "quit", ""),
+        Binding("f1", "switch_mode('stats')", ""),
+        Binding("f2", "switch_mode('messages')", ""),
+        Binding("f3", "switch_mode('live')", ""),
+        Binding("f5", "switch_mode('config')", ""),
+        Binding("space", "toggle_freeze", ""),
+        Binding("q", "quit", "", priority=True),
     ]
 
     def __init__(self, channel: str = "can0", **kwargs):
