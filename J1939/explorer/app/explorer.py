@@ -221,15 +221,23 @@ class MessagesScreen(Static):
     def _show_detail_for_row(self, row_index: int):
         eid = self._eid_list[row_index]
         data = self._last_data_by_eid.get(eid, b"")
-        _, _, _, pgn, sa = parse_eid(eid)
+        priority, _, _, pgn, sa = parse_eid(eid)
         hex_str = " ".join(f"{b:02X}" for b in data) if data else ""
         lines = [
             f"EID : {eid:08X}",
+            f"PRIO: {priority}",
             f"PGN : {pgn} 0x{pgn:05X}",
-            f"SA  : {sa:02X}",
-            f"Raw : {hex_str}",
         ]
         app = self.app
+        if isinstance(app, ExplorerApp):
+            pgndef = app.dictionary.get(str(pgn), {})
+            description = pgndef.get("description", "")
+            if description:
+                lines.append(f"{description}")
+        lines.extend([
+            f"SA  : {sa:02X}",
+            f"Raw : {hex_str}",
+        ])
         if isinstance(app, ExplorerApp):
             spns = extract_numeric_spns(eid, data, app.dictionary)
             if spns:
