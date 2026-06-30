@@ -58,5 +58,21 @@
                 "offset": 0
             }
         }
+    },
+    "59904": {
+        "nickname": "REQ",
+        "description": "CAN REQUEST",
+        "display": true,
+        "spns": {
+            "000": {
+                "nickname": "PGN",
+                "description": "REQUESTED PGN",
+                "display": true,
+                "bytes": [ 1, 2 ],
+                "unit": "dec",
+                "per_bit": 1,
+                "offset": 0
+            }
+        }
     }
 }
