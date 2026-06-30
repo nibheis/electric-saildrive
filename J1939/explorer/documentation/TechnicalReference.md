@@ -257,11 +257,18 @@ This prevents the `table.clear()` bug where arrow-key navigation would break bec
 table.add_column("PGN",   width=7)
 table.add_column("SPN",   width=8)
 table.add_column("Value", width=10)
+table.add_column("Age",   width=5)
 ```
 
-The `Desc` (description) column was dropped for width in the 40-column layout. Total data width = ~27 columns, which fits well inside narrow terminals.
+The `Desc` (description) column was dropped for width in the 40-column layout. Total data width = ~32 columns (including borders), which fits inside a narrow terminal.
 
 Each row represents **one displayable SPN**, not one CAN message.  A single message can produce multiple rows if several SPNs inside it have `"display`: true`.
+
+**Age column** shows how long ago the underlying CAN message was received:
+- Computed as `now - message_ts` from `J1939MessageStore`
+- Format: `<N>s` if < 60 s, else `<N>m`
+- If the PGN has never been seen → `"--"`
+- The store's `get_latest_data_and_ts_for_pgn()` returns both payload and timestamp in one lookup.
 
 The table is fully cleared and rebuilt every tick, similar to the Messages table.
 
@@ -391,6 +398,7 @@ class TestApp(ExplorerApp):
 | `CANThread` | `j1939_can.py` | Background reader from `python-can` |
 | `decode_spn()` | `j1939_can.py` | Extract numeric value from payload bytes |
 | `build_display_pgn_set()` | `j1939_can.py` | Compile whitelist of displayable PGNs from dictionary |
+| `get_latest_data_and_ts_for_pgn()` | `j1939_can.py` | Return latest payload + timestamp for a PGN |
 | `extract_numeric_spns()` | `j1939_can.py` | Build display rows for a given message |
 | `StatsScreen` | `explorer.py` | Static widget for statistics |
 | `MessagesScreen` | `explorer.py` | DataTable + detail panel |

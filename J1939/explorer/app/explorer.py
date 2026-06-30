@@ -246,26 +246,34 @@ class LiveScreen(Static):
         table.add_column("PGN", width=7)
         table.add_column("SPN", width=8)
         table.add_column("Value", width=10)
+        table.add_column("Age", width=5)
 
     def refresh_live(self, store: J1939MessageStore, dictionary: Dict[str, Any]):
         table = self.query_one("#live_table", DataTable)
+        now = time.time()
         snapshot: List[List[str]] = []
         for pgn_str, pgndef in dictionary.items():
             if not pgndef.get("display", True):
                 continue
             pgn = int(pgn_str)
             pgn_nick = pgndef.get("nickname", "")
-            data_bytes = store.get_latest_data_for_pgn(pgn)
+            data_bytes, ts = store.get_latest_data_and_ts_for_pgn(pgn)
             spns = pgndef.get("spns", {})
             for spn_id, spn_spec in spns.items():
                 if not spn_spec.get("display", True):
                     continue
                 val = decode_spn(data_bytes if data_bytes else b"", spn_spec) if data_bytes is not None else None
                 value_str = spn_display_value(spn_spec, val)
+                if ts is not None:
+                    age = now - ts
+                    age_str = f"{age:.0f}s" if age < 60 else f"{int(age//60)}m"
+                else:
+                    age_str = "--"
                 snapshot.append([
                     pgn_nick if pgn_nick else f"{pgn}",
                     spn_spec.get("nickname", spn_id),
                     value_str,
+                    age_str,
                 ])
         table.clear()
         for row in snapshot:

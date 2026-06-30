@@ -114,6 +114,17 @@ class J1939MessageStore:
                     return v["data"]
             return None
 
+    def get_latest_data_and_ts_for_pgn(
+        self, pgn: int
+    ) -> tuple[Optional[bytes], Optional[float]]:
+        """Return (data_bytes, timestamp) for the latest EID matching the PGN."""
+        with self._lock:
+            for eid, v in self.messages.items():
+                _, _, _, msg_pgn, _ = parse_eid(eid)
+                if msg_pgn == pgn:
+                    return v["data"], v.get("ts")
+            return None, None
+
     def stats(self) -> Dict[str, Any]:
         """Return stats dict."""
         with self._lock:
