@@ -14,6 +14,8 @@ from .j1939_can import (
     load_dictionary,
     DICT_PATH,
     extract_numeric_spns,
+    decode_spn,
+    spn_display_value,
 )
 
 # ---------------------------------------------------------------------------
@@ -187,17 +189,22 @@ class LiveScreen(Static):
     def refresh_live(self, store: J1939MessageStore, dictionary: Dict[str, Any]):
         table = self.query_one("#live_table", DataTable)
         snapshot: List[List[str]] = []
-        for eid, ts, hex_str, data_bytes in store.get_all():
-            _, _, _, pgn, sa = parse_eid(eid)
-            spns = extract_numeric_spns(eid, data_bytes, dictionary)
-            pgn_str = str(pgn)
-            pgndef = dictionary.get(pgn_str, {})
+        for pgn_str, pgndef in dictionary.items():
+            if not pgndef.get("display", True):
+                continue
+            pgn = int(pgn_str)
             pgn_nick = pgndef.get("nickname", "")
-            for spn in spns:
+            data_bytes = store.get_latest_data_for_pgn(pgn)
+            spns = pgndef.get("spns", {})
+            for spn_id, spn_spec in spns.items():
+                if not spn_spec.get("display", True):
+                    continue
+                val = decode_spn(data_bytes if data_bytes else b"", spn_spec) if data_bytes is not None else None
+                value_str = spn_display_value(spn_spec, val)
                 snapshot.append([
                     pgn_nick if pgn_nick else f"{pgn}",
-                    spn["nickname"],
-                    spn["value_str"],
+                    spn_spec.get("nickname", spn_id),
+                    value_str,
                 ])
         table.clear()
         for row in snapshot:

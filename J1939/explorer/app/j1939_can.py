@@ -95,6 +95,16 @@ class J1939MessageStore:
                 key=lambda x: x[0],
             )
 
+    def get_latest_data_for_pgn(self, pgn: int) -> Optional[bytes]:
+        """Return the latest payload for any EID matching the given PGN, or None."""
+        with self._lock:
+            # Iterate most-recent-first (store is a dict, iterate existing is fine)
+            for eid, v in self.messages.items():
+                _, _, _, msg_pgn, _ = parse_eid(eid)
+                if msg_pgn == pgn:
+                    return v["data"]
+            return None
+
     def stats(self) -> Dict[str, Any]:
         """Return stats dict."""
         with self._lock:
@@ -189,7 +199,9 @@ def decode_spn(data: bytes, spn_spec: Dict[str, Any]) -> Optional[float]:
     return val
 
 
-def spn_display_value(spn_spec: Dict[str, Any], val: float) -> str:
+def spn_display_value(spn_spec: Dict[str, Any], val: Optional[float]) -> str:
+    if val is None:
+        return "n/a"
     unit = spn_spec.get("unit", "")
     fmt = "{:.2f}" if abs(val - round(val)) > 0.005 else "{:.0f}"
     return f"{fmt.format(val)} {unit}"
