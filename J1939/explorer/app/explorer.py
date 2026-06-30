@@ -3,6 +3,8 @@
 import time
 from typing import Any, Dict, List, Optional
 
+from rich.text import Text
+
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.widgets import DataTable, Static
@@ -30,11 +32,19 @@ MODE_LIVE = "live"
 # ---------------------------------------------------------------------------
 
 class CompactHeader(Static):
-    """Single line header: Title | MODE | [FROZEN]."""
+    """Single line header with colored state letters."""
 
-    def update_header(self, title: str, mode: str, frozen: bool):
-        tag = "" if not frozen else " [F]"
-        text = f"{title} | {mode.upper()}{tag}"
+    def update_header(self, title: str, mode: str, connected: bool, frozen: bool):
+        conn_char = "C" if connected else "D"
+        conn_style = "green" if connected else "red"
+        freeze_char = "." if not frozen else "F"
+        freeze_style = "green" if not frozen else "red"
+        text = Text.assemble(
+            f"{title} | {mode.upper()} | ",
+            (conn_char, conn_style),
+            " | ",
+            (freeze_char, freeze_style),
+        )
         self.update(text)
 
 # ---------------------------------------------------------------------------
@@ -105,6 +115,7 @@ class StatsScreen(Static):
 class MessagesScreen(Static):
     """Screen showing live list of CAN messages + detail panel.
     Layout: table on top, detail below (full width, vertical stack).
+    Uses incremental updates to avoid breaking keyboard cursor navigation.
     """
 
     _eid_list: List[int] = []
@@ -128,21 +139,70 @@ class MessagesScreen(Static):
     def detail(self) -> Static:
         return self.query_one("#messages_detail_content", Static)
 
-    def refresh_messages(self, store: J1939MessageStore):
-        rows = store.get_all()
+    def _eids_changed(self, current_rows: List[tuple]) -> bool:
+        """Return True if the set or order of EIDs differs from last refresh."""
+        if len(current_rows) != len(self._eid_list):
+            return True
+        for i, (eid, _, _, _) in enumerate(current_rows):
+            if eid != self._eid_list[i]:
+                return True
+        return False
+
+    def _rebuild_table(self, current_rows: List[tuple], now: float):
+        """Full clear+rebuild. Remember selected EID and restore cursor after."""
+        # remember which EID was selected (if any)
+        selected_eid = None
+        if self._eid_list and self.table.cursor_row is not None:
+            idx = self.table.cursor_row
+            if 0 <= idx < len(self._eid_list):
+                selected_eid = self._eid_list[idx]
+
         self.table.clear()
         self._eid_list = []
         self._last_data_by_eid = {}
-        now = time.time()
-        for eid, ts, hex_str, data_bytes in rows:
+
+        for eid, ts, hex_str, data_bytes in current_rows:
             age = now - ts
             age_str = f"{age:.0f}s" if age < 60 else f"{int(age//60)}m"
             self.table.add_row(f"{eid:08X}", age_str, key=str(eid))
             self._eid_list.append(eid)
             self._last_data_by_eid[eid] = data_bytes
 
-        if self._eid_list:
-            self._show_detail_for_row(0)
+        # restore cursor position by EID, or stay at last row
+        if selected_eid is not None and selected_eid in self._last_data_by_eid:
+            for new_idx, eid in enumerate(self._eid_list):
+                if eid == selected_eid:
+                    c = max(0, min(new_idx, len(self._eid_list) - 1))
+                    self.table.move_cursor(row=c, animate=False)
+                    self._show_detail_for_row(c)
+                    break
+        elif self._eid_list:
+            last = len(self._eid_list) - 1
+            self.table.move_cursor(row=last, animate=False)
+            self._show_detail_for_row(last)
+
+    def _update_ages(self, current_rows: List[tuple], now: float):
+        """Only update the Age column in-place; preserve cursor & selection."""
+        for row_idx, (eid, ts, hex_str, data_bytes) in enumerate(current_rows):
+            # keep data fresh for detail panel
+            self._last_data_by_eid[eid] = data_bytes
+            age = now - ts
+            age_str = f"{age:.0f}s" if age < 60 else f"{int(age//60)}m"
+            from textual.coordinate import Coordinate
+            self.table.update_cell_at(Coordinate(row=row_idx, column=1), age_str)
+        # Also refresh the detail panel for the currently selected row
+        cursor = self.table.cursor_row
+        if cursor is not None and 0 <= cursor < len(self._eid_list):
+            self._show_detail_for_row(cursor)
+
+    def refresh_messages(self, store: J1939MessageStore):
+        rows = store.get_all()
+        now = time.time()
+
+        if self._eids_changed(rows):
+            self._rebuild_table(rows, now)
+        else:
+            self._update_ages(rows, now)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         cursor_row = event.cursor_row
@@ -305,22 +365,25 @@ class ExplorerApp(App):
 
     def _update_header(self):
         header = self.query_one("#header", CompactHeader)
-        header.update_header(self.title, self.explorer_mode, self._frozen)
+        stats = self.store.stats()
+        header.update_header(
+            self.title, self.explorer_mode, stats["connected"], self._frozen
+        )
 
     def _start_can(self):
         self.can_thread = CANThread(channel=self._channel, store=self.store)
         self.can_thread.start()
 
     def _tick(self):
-        if self._frozen:
-            return
-        mode = self.explorer_mode
-        if mode == MODE_STATS:
-            self.query_one(f"#{MODE_STATS}", StatsScreen).update_stats(self.store.stats())
-        elif mode == MODE_MESSAGES:
-            self.query_one(f"#{MODE_MESSAGES}", MessagesScreen).refresh_messages(self.store)
-        elif mode == MODE_LIVE:
-            self.query_one(f"#{MODE_LIVE}", LiveScreen).refresh_live(self.store, self.dictionary)
+        if not self._frozen:
+            mode = self.explorer_mode
+            if mode == MODE_STATS:
+                self.query_one(f"#{MODE_STATS}", StatsScreen).update_stats(self.store.stats())
+            elif mode == MODE_MESSAGES:
+                self.query_one(f"#{MODE_MESSAGES}", MessagesScreen).refresh_messages(self.store)
+            elif mode == MODE_LIVE:
+                self.query_one(f"#{MODE_LIVE}", LiveScreen).refresh_live(self.store, self.dictionary)
+        self._update_header()
 
 
 # ---------------------------------------------------------------------------

@@ -107,6 +107,25 @@ All three screens are siblings in the DOM. Mode switching is done by toggling `d
 ### Why `Static` containers instead of `Screen`?
 The app uses a single `Screen` with stacked `Static` widgets. This avoids managing a screen stack and keeps the header/footer persistent without re-mounting.
 
+### CompactHeader with coloured state indicators
+
+The header renders as:
+
+```
+J1939 | MESSAGES | C | .
+```
+
+| Position | Value | Colour | Meaning |
+|---|---|---|---|
+| 3rd field | `C` | green | CAN bus connected |
+| 3rd field | `D` | red | CAN bus disconnected |
+| 4th field | `.` | green | Display running (unfrozen) |
+| 4th field | `F` | red | Display frozen |
+
+`Text.assemble()` from `rich.text.Text` is used to apply inline colour styles via `update(text)`. The header refreshes every tick (0.5 s) so the connection indicator stays live even when frozen.
+
+**Why single-letter indicators instead of words?**  At 40 columns, full words (`CONN`, `FROZEN`) would push the title off-screen. Two separated letters are readable at a glance.
+
 ---
 
 ## 6. Threading Model
@@ -217,7 +236,12 @@ def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None
 
 Because `MessagesScreen` is the parent in the DOM, it receives the message bubbled up from the table.  The screen maintains `_eid_list` (parallel to table rows) to map `cursor_row` back to the EID.
 
-**Rebuilding strategy:**  On every tick, the table is `clear()`ed and rebuilt.  For a 40×40 terminal this is trivial; if scaling to thousands of EIDs, consider incremental updates.
+**Incremental update strategy:**  On every tick:
+1. Compare current EID list with previous (`_eids_changed()`).
+2. If changed → `_rebuild_table()`: `clear()` + `add_row()`, but remember the previously selected EID and restore the cursor via `move_cursor()` afterward.
+3. If unchanged → `_update_ages()`: only call `update_cell_at()` on the Age column, leaving the cursor and selection untouched.
+
+This prevents the `table.clear()` bug where arrow-key navigation would break because the cursor was being destroyed every 0.5 s.
 
 ---
 
@@ -332,7 +356,8 @@ class TestApp(ExplorerApp):
 
 | Topic | Current State | Possible Improvement |
 |---|---|---|
-| **Table rebuild** | Full clear+rebuild every tick | Incremental row updates for large bus loads |
+| **Table rebuild** | Incremental updates with cursor preservation | ✅ Done |
+| **Header state** | Old: plain text with `[F]` tag. New: single-letter coloured indicators (`C`/`D` for connection, `.`/`F` for freeze) | ✅ Done |
 | **SPN size** | Only 1-byte and 2-byte SPNs supported | Add 3-byte, 4-byte, bit-field decoding |
 | **Endianness** | Assumes little-endian | Support big-endian flag in dictionary |
 | **CAN interface** | Hard-coded `socketcan` | Make interface type configurable (e.g. `pcan`, `virtual`) |
@@ -340,7 +365,7 @@ class TestApp(ExplorerApp):
 | **Link resilience** | Reconnect loop works for startup failure and runtime drops | Notify user with toast on link loss / recovery |
 | **Data logging** | None | Add optional log-to-file in `CANThread` |
 | **Message send** | Read-only only | Could extend with a send panel later |
-| **PGN 65262 only** | ET1 is the only defined PGN in the checked-in JSON | Expand dictionary as needed |
+| **PGN 65262 only** | ET1 + EEC1 defined in checked-in JSON | Expand dictionary as needed |
 
 ---
 

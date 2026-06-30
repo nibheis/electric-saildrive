@@ -13,15 +13,6 @@
                 "per_bit": 1,
                 "offset": -40
             },
-            "174": {
-                "nickname": "EFT",
-                "description": "ENGINE FUEL TEMPERATURE",
-                "bytes": [ 1 ],
-                "display": false,
-                "unit": "°C",
-                "per_bit": 1,
-                "offset": -40
-            },
             "175": {
                 "nickname": "CT",
                 "description": "CONTROLLER TEMPERATURE",
@@ -30,6 +21,22 @@
                 "unit": "°C",
                 "per_bit": 0.03125,
                 "offset": -273
+            }
+        }
+    },
+    "61444": {
+        "nickname": "EEC1",
+        "description": "ELECTRONIC ENGINE CONTROLLER #1",
+        "display": true,
+        "spns": {
+            "190": {
+                "nickname": "RPM",
+                "description": "ENGINE SPEED",
+                "display": true,
+                "bytes": [ 4, 5 ],
+                "unit": "RPM",
+                "per_bit": 0.125,
+                "offset": 0
             }
         }
     }
