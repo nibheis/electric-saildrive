@@ -511,25 +511,49 @@ class LoggingScreen(Static):
 
     def on_mount(self):
         table = self.query_one("#logs_table", DataTable)
-        table.add_column("File", width=20)
+        table.add_column("File", width=26)
         table.add_column("Size", width=8)
-        table.add_column("Age", width=5)
 
     @property
     def table(self) -> DataTable:
         return self.query_one("#logs_table", DataTable)
 
-    def refresh_files(self):
+    def _needs_rebuild(self, current_files: List[tuple]) -> bool:
+        if len(current_files) != len(self._file_list):
+            return True
+        for i, (name, _, _) in enumerate(current_files):
+            if name != self._file_list[i]:
+                return True
+        return False
+
+    def _rebuild_table(self, current_files: List[tuple]):
+        # Remember selection
+        selected = None
+        if self._file_list and self.table.cursor_row is not None:
+            idx = self.table.cursor_row
+            if 0 <= idx < len(self._file_list):
+                selected = self._file_list[idx]
+
         self.table.clear()
         self._file_list = []
-        logger = CANLogger()
-        files = logger.list_files()
-        for name, size, mtime in files:
+        for name, size, _mtime in current_files:
             size_kb = size / 1024
-            age_s = time.time() - mtime
-            age_str = f"{age_s:.0f}s" if age_s < 60 else f"{int(age_s // 60)}m"
-            self.table.add_row(f"{name}", f"{size_kb:.1f}kB", f"{age_str}", key=name)
+            self.table.add_row(name, f"{size_kb:.1f}kB", key=name)
             self._file_list.append(name)
+
+        # Restore cursor by filename
+        if selected is not None and selected in self._file_list:
+            for i, n in enumerate(self._file_list):
+                if n == selected:
+                    self.table.move_cursor(row=i, animate=False)
+                    break
+        elif self._file_list:
+            self.table.move_cursor(row=0, animate=False)
+
+    def refresh_files(self):
+        files = CANLogger().list_files()
+        if self._needs_rebuild(files):
+            self._rebuild_table(files)
 
     def selected_file(self) -> Optional[str]:
         cursor = self.table.cursor_row
