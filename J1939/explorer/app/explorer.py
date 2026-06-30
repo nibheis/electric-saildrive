@@ -376,15 +376,15 @@ class ConfigScreen(Static):
             )
             yield Static("")
             with Horizontal(id="config_row1"):
-                yield Button("Apply", id="config_apply_btn", variant="primary")
+                yield Button("Save", id="config_save_btn", variant="primary")
                 yield Button("Revert", id="config_revert_btn", variant="default")
             with Horizontal(id="config_row2"):
                 yield Button("Set UP", id="config_up_btn", variant="success")
                 yield Button("Set DOWN", id="config_down_btn", variant="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "config_apply_btn":
-            self.apply_config()
+        if event.button.id == "config_save_btn":
+            self.save_settings()
         elif event.button.id == "config_revert_btn":
             self.revert_config()
         elif event.button.id == "config_up_btn":
@@ -433,7 +433,8 @@ class ConfigScreen(Static):
             f"Status: {status}"
         )
 
-    def apply_config(self):
+    def save_settings(self):
+        """Save current input values to configuration.json. No interface changes."""
         iface = self.query_one("#config_iface_input", Input).value.strip()
         bitrate_str = self.query_one("#config_bitrate_input", Input).value.strip()
         delay_str = self.query_one("#config_delay_input", Input).value.strip()
@@ -447,24 +448,12 @@ class ConfigScreen(Static):
         self._config["socketcan_interface"] = iface
         self._config["can_bitrate"] = bitrate
         self._config["replay_delay"] = delay
-        try:
-            subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
-            subprocess.run(
-                ["sudo", "ip", "link", "set", iface, "type", "can", "bitrate", str(bitrate)],
-                check=True,
-            )
-            subprocess.run(["sudo", "ip", "link", "set", "up", iface], check=True)
-        except subprocess.CalledProcessError as exc:
-            if self.app:
-                self.app.notify(f"Interface error: {exc}", severity="error", timeout=3)
-            return
         save_config(self._config)
         self.query_one("#config_iface_value", Static).update(f"Iface: {iface}")
         self.query_one("#config_bitrate_value", Static).update(f"Bitrt: {bitrate}")
         self.query_one("#config_delay_value", Static).update(f"Delay: {delay}ms")
         if self.app:
-            self.app.notify("Settings applied", severity="information", timeout=2)
-        self._update_status()
+            self.app.notify("Settings saved", severity="information", timeout=2)
 
     def revert_config(self):
         new_config = load_config()
@@ -492,18 +481,55 @@ class ConfigScreen(Static):
             self.app.notify("Settings reverted", severity="information", timeout=2)
 
     def set_up(self):
+        """
+        1. Check link is DOWN or UP (reject UNKNOWN).
+        2. If UP, set DOWN first.
+        3. Apply bitrate and set UP.
+        """
         iface = self._config.get("socketcan_interface", "can0")
-        try:
-            subprocess.run(["sudo", "ip", "link", "set", "up", iface], check=True)
+        status = self._check_interface()
+        if status == "UNKNOWN":
             if self.app:
-                self.app.notify(f"Interface {iface} up", severity="information", timeout=2)
+                self.app.notify("Interface does not exist", severity="error", timeout=2)
+            return
+        if status == "UP":
+            try:
+                subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
+            except subprocess.CalledProcessError as exc:
+                if self.app:
+                    self.app.notify(f"Set down error: {exc}", severity="error", timeout=3)
+                return
+        bitrate = self._config.get("can_bitrate", 250000)
+        try:
+            subprocess.run(
+                ["sudo", "ip", "link", "set", iface, "type", "can", "bitrate", str(bitrate)],
+                check=True,
+            )
+            subprocess.run(["sudo", "ip", "link", "set", "up", iface], check=True)
         except subprocess.CalledProcessError as exc:
             if self.app:
-                self.app.notify(f"Set up error: {exc}", severity="error", timeout=3)
+                self.app.notify(f"Interface error: {exc}", severity="error", timeout=3)
+            self._update_status()
+            return
+        if self.app:
+            self.app.notify(f"Interface {iface} up ({bitrate} bps)", severity="information", timeout=2)
         self._update_status()
 
     def set_down(self):
+        """
+        1. Check link is DOWN or UP (reject UNKNOWN).
+        2. Set DOWN if it was UP.
+        """
         iface = self._config.get("socketcan_interface", "can0")
+        status = self._check_interface()
+        if status == "UNKNOWN":
+            if self.app:
+                self.app.notify("Interface does not exist", severity="error", timeout=2)
+            return
+        if status == "DOWN":
+            if self.app:
+                self.app.notify(f"Interface {iface} already down", severity="warning", timeout=1)
+            return
         try:
             subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
             if self.app:
