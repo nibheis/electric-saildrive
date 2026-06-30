@@ -36,7 +36,7 @@
                 "nickname": "RPM",
                 "description": "ENGINE SPEED",
                 "display": true,
-                "bytes": [ 4, 5 ],
+                "bytes": [ 3, 4 ],
                 "unit": "RPM",
                 "per_bit": 0.125,
                 "offset": 0
@@ -52,7 +52,7 @@
                 "nickname": "TH",
                 "description": "TOTAL ENGINE HOURS",
                 "display": true,
-                "bytes": [ 1, 2, 3, 4 ],
+                "bytes": [ 0, 1, 2, 3 ],
                 "unit": "hrs",
                 "per_bit": 0.05,
                 "offset": 0
