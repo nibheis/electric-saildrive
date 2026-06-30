@@ -364,6 +364,10 @@ class ExplorerApp(App):
         for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE):
             screen = self.query_one(f"#{m}", Static)
             screen.display = (m == mode)
+        # Restore focus to the DataTable when returning to Messages screen
+        if mode == MODE_MESSAGES:
+            messages_screen = self.query_one(f"#{MODE_MESSAGES}", MessagesScreen)
+            messages_screen.table.focus()
         self._update_header()
 
     def _update_header(self):
