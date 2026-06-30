@@ -62,14 +62,14 @@ Presents CAN bus activity statistics:
 ### 2. Messages
 Shows a live list of received CAN messages sorted by EID:
 - One EID per line: **EID** on the left, **Age** on the right
-- Selecting a row displays full details on the right panel:
+- Selecting a row displays full details below the table:
   - EID, PGN, SA
   - Raw data bytes
   - Decoded SPN values (from the dictionary)
 
 ### 3. Live
 Shows a live view of current decoded data on the CAN bus:
-- Columns: **PGN** nickname | **Description** | **SPN** nickname | **Value**
+- Columns: **PGN** nickname | **SPN** nickname | **Value**
 - Only SPNs marked with `"display": true` in the dictionary are shown
 
 ---

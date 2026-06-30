@@ -85,22 +85,24 @@ self.timestamps_window: deque    # list of (timestamp, eid), pruned to 15 s
 
 ```
 ExplorerApp (Screen)
-├── Header (show_clock=True)
+├── CompactHeader (id="header", single line)
 ├── StatsScreen (Static, id="stats")
 │   └── Vertical
-│       └── Static labels (updated via .update())
+│       └── Compact Static labels (updated via .update())
 ├── MessagesScreen (Static, id="messages")
-│   └── Horizontal
-│       ├── Vertical (60% width)
-│       │   └── DataTable (columns: EID, Age)
-│       └── Vertical (40% width)
-│           └── Static (detail text)
+│   └── Vertical
+│       ├── Static ("Messages")
+│       ├── DataTable (columns: EID=9, Age=5)
+│       ├── Static ("Detail")
+│       └── Static (detail text, full width)
 ├── LiveScreen (Static, id="live")
-│   └── DataTable (columns: PGN, Desc, SPN, Value)
-└── Footer
+│   └── DataTable (columns: PGN=7, SPN=8, Value=10)
+└── CompactFooter (id="footer", single line)
 ```
 
 All three screens are siblings in the DOM. Mode switching is done by toggling `display` (CSS display property) on each screen widget — **not** by pushing/popping Textual `Screen` objects.
+
+**Why custom header/footer instead of Textual's built-in?**  The built-in `Header` widget includes a clock and logo that consume ~25 columns. On a 40-column terminal this leaves almost no room for the title. The custom `CompactHeader` and `CompactFooter` are single `Static` lines with minimal text.
 
 ### Why `Static` containers instead of `Screen`?
 The app uses a single `Screen` with stacked `Static` widgets. This avoids managing a screen stack and keeps the header/footer persistent without re-mounting.
@@ -161,7 +163,7 @@ BINDINGS = [
 `_set_mode(mode)`:
 1. Sets `self.explorer_mode = mode`
 2. Loops over the three screen widgets and sets `display = (m == mode)`
-3. Updates `self.sub_title` so the Header shows the current mode
+3. Calls `self._update_header()` which updates the `CompactHeader` text with title + mode + optional `[F]` freeze tag
 
 **Pitfall:**  Do **not** name the attribute `current_mode`.  Textual's `App` base class already defines `current_mode` as a read-only property (used by the built-in screen stack). Using it caused:
 
@@ -222,13 +224,14 @@ Because `MessagesScreen` is the parent in the DOM, it receives the message bubbl
 ## 10. Live Screen — DataTable Columns
 
 ```python
-table.add_column("PGN",   width=6)
-table.add_column("Desc",  width=12)
+table.add_column("PGN",   width=7)
 table.add_column("SPN",   width=8)
-table.add_column("Value", width=12)
+table.add_column("Value", width=10)
 ```
 
-Each row represents **one displayable SPN**, not one CAN message.  A single message can produce multiple rows if several SPNs inside it have `"display": true`.
+The `Desc` (description) column was dropped for width in the 40-column layout. Total data width = ~27 columns, which fits well inside narrow terminals.
+
+Each row represents **one displayable SPN**, not one CAN message.  A single message can produce multiple rows if several SPNs inside it have `"display`: true`.
 
 The table is fully cleared and rebuilt every tick, similar to the Messages table.
 
@@ -288,17 +291,19 @@ Each SPN spec:
 
 ```css
 Screen { layout: vertical; width: 100%; height: 100%; }
-Header { height: 1; }
-Footer { height: 1; }
+CompactHeader { height: 1; text-style: bold; }
+CompactFooter { height: 1; color: $text-muted; }
 ```
 
-The remaining space is shared by the three `Static` screens.  Widths are percentages:
-- Messages list: 60%
-- Messages detail: 40%
+The remaining space is shared by the three screen widgets, each set to `height: 1fr`.
 
-`.section_title` applies bold text-style to headings.
+**Messages layout change:**  Originally used a horizontal split (60%/40%). Switched to a **vertical stack** (table above, detail below) because at 40 columns, a side-by-side layout leaves only ~20-24 columns for each pane — barely enough for the EID column alone.
 
-**Observation:** In a 40-column terminal, `DataTable` column widths must be tight.  Current widths (`EID=9`, `Age=6`) fit exactly within the left pane.
+`.bold` applies bold text-style to headings (replaces `.section_title` to save characters).
+
+**Observation:** In a 40-column terminal, `DataTable` column widths must be tight:
+- **Messages**: EID=9, Age=5 → total ~15 columns (including borders)
+- **Live**: PGN=7, SPN=8, Value=10 → total ~27 columns
 
 ---
 
