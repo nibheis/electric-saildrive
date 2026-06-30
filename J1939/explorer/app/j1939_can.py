@@ -6,7 +6,7 @@ import struct
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Set
 
 try:
     import can
