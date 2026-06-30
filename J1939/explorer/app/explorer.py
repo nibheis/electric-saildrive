@@ -15,6 +15,7 @@ from .j1939_can import (
     CANThread,
     load_dictionary,
     DICT_PATH,
+    build_display_pgn_set,
     extract_numeric_spns,
     decode_spn,
     spn_display_value,
@@ -325,6 +326,7 @@ class ExplorerApp(App):
         self.can_thread: Optional[CANThread] = None
         self._update_timer = None
         self._frozen: bool = False
+        self._display_pgns: set = set()
 
     def compose(self) -> ComposeResult:
         yield CompactHeader(id="header")
@@ -335,6 +337,7 @@ class ExplorerApp(App):
 
     def on_mount(self):
         self.dictionary = load_dictionary(DICT_PATH)
+        self._display_pgns = build_display_pgn_set(self.dictionary)
         self.title = "J1939"
         self._set_mode(MODE_STATS)
         self._start_can()
@@ -371,7 +374,11 @@ class ExplorerApp(App):
         )
 
     def _start_can(self):
-        self.can_thread = CANThread(channel=self._channel, store=self.store)
+        self.can_thread = CANThread(
+            channel=self._channel,
+            store=self.store,
+            display_pgns=self._display_pgns,
+        )
         self.can_thread.start()
 
     def _tick(self):

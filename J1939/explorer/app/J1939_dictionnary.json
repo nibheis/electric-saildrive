@@ -1,4 +1,7 @@
 {
+   "000000": {
+        "display": false,
+    },
     "65262": {
         "nickname": "ET1",
         "description": "ENGINE TEMPERATURE #1",

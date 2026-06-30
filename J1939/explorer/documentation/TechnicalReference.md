@@ -134,7 +134,7 @@ J1939 | MESSAGES | C | .
 1. **CANThread** (`j1939_can.py`) — daemon thread with an **outer reconnect loop**.
 2. **Textual main loop** — runs the TUI, handles input, and fires `_tick()` every 500 ms via `set_interval(0.5, ...)`.
 
-### CANThread reconnect loop
+### CANThread reconnect loop with PGN filtering
 
 ```python
 while not stopped:
@@ -144,18 +144,24 @@ while not stopped:
             while not stopped:
                 msg = bus.recv(timeout=0.1)
                 if msg:
-                    store.add(...)
+                    _, _, _, pgn, _ = parse_eid(msg.arbitration_id)
+                    if pgn in display_pgns:
+                        store.add(...)
+                    # else: silently drop the message
     except Exception:
         store.on_disconnect()           # mark Connected = NO
         if stopped.wait(1.0):           # 1 s backoff, interruptible
             return
 ```
 
+The PGN whitelist is built once at startup by `build_display_pgn_set(dictionary)`, which walks the JSON dictionary and collects PGNs whose top-level `"display"` flag is `true`. If a PGN is missing from the dictionary or has `display: false`, every CAN frame with that PGN is dropped **at the CAN thread level** before it ever reaches `J1939MessageStore`.
+
 **Benefits:**
 - **Startup without interface** → `Disconnected`, retries every second until the interface appears.
 - **Runtime link drop** → catches `Exception` from `bus.recv()`, marks `Disconnected`, closes the bus context cleanly, then retries.
 - **Link recovery** → next iteration of the outer `while` loop opens the bus again and marks `Connected`.
 - **Graceful shutdown** → `stop()` sets the `Event`; both the inner read loop and the retry sleep exit immediately.
+- **Filtered PGNs don't pollute stats** — dropped messages are invisible to the store, so counts / rates / device lists only reflect the PGNs the user cares about.
 
 **Synchronisation:**  All shared state lives in `J1939MessageStore`, protected by a single lock. The UI only reads; the CAN thread only writes.
 
@@ -199,7 +205,7 @@ The fix was to rename the field to `explorer_mode`.
 A boolean `self._frozen` on `ExplorerApp` gates the `_tick()` method.  When active:
 - `_tick()` returns immediately — no screen widgets are refreshed.
 - The **CAN thread keeps running** in the background; messages continue to accumulate in `J1939MessageStore`.
-- The header subtitle shows `[FROZEN]` (e.g. `(stats) [FROZEN]`).
+- The header shows `F` in red.
 - A toast notification confirms the state change (`severity="warning"` for freeze, `"information"` for resume).
 
 ### Implementation sketch
@@ -307,7 +313,12 @@ Each SPN spec:
 | `per_bit` | float | Scale factor |
 | `offset` | float | Zero offset |
 
-**Important:** The app only processes SPNs where `display == true`.  Non-display SPNs are still part of the dictionary for documentation but are skipped by `extract_numeric_spns()`.
+**Important:** There are two levels of filtering:
+
+1. **PGN level** — `display: false` on a PGN entry means **the entire CAN message is dropped** by `CANThread` before it reaches the store. The message does not appear in stats, Messages screen, or Live screen.
+2. **SPN level** — `display: false` on an SPN entry means only that individual parameter is hidden, but the parent message is still stored and other SPNs within it are still decoded.
+
+`build_display_pgn_set()` computes the PGN whitelist once at startup. Dictionary entries with `"display": false` (or missing `"display"`) are effectively invisible to the app.
 
 ---
 
@@ -377,6 +388,7 @@ class TestApp(ExplorerApp):
 | `J1939MessageStore` | `j1939_can.py` | Thread-safe cache + stats |
 | `CANThread` | `j1939_can.py` | Background reader from `python-can` |
 | `decode_spn()` | `j1939_can.py` | Extract numeric value from payload bytes |
+| `build_display_pgn_set()` | `j1939_can.py` | Compile whitelist of displayable PGNs from dictionary |
 | `extract_numeric_spns()` | `j1939_can.py` | Build display rows for a given message |
 | `StatsScreen` | `explorer.py` | Static widget for statistics |
 | `MessagesScreen` | `explorer.py` | DataTable + detail panel |

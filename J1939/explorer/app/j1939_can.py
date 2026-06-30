@@ -49,6 +49,15 @@ def load_dictionary(path: str) -> Dict[str, Any]:
         return json.load(f)
 
 
+def build_display_pgn_set(dictionary: Dict[str, Any]) -> Set[int]:
+    """Return set of displayable PGN integers from dictionary entries."""
+    result = set()
+    for pgn_str, pgndef in dictionary.items():
+        if pgndef.get("display", False):
+            result.add(int(pgn_str))
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Message store
 # ---------------------------------------------------------------------------
@@ -142,10 +151,18 @@ class J1939MessageStore:
 # ---------------------------------------------------------------------------
 
 class CANThread(threading.Thread):
-    def __init__(self, channel: str = "can0", store: Optional[J1939MessageStore] = None):
+    """Background thread reading from socketcan and storing displayable messages."""
+
+    def __init__(
+        self,
+        channel: str = "can0",
+        store: Optional[J1939MessageStore] = None,
+        display_pgns: Optional[Set[int]] = None,
+    ):
         super().__init__(daemon=True)
         self.channel = channel
         self.store = store or J1939MessageStore()
+        self.display_pgns = display_pgns or set()
         self._stop = threading.Event()
 
     def run(self):
@@ -155,18 +172,22 @@ class CANThread(threading.Thread):
         while not self._stop.is_set():
             try:
                 with can.Bus(
-                    interface="socketcan", channel=self.channel, receive_own_messages=False
+                    interface="socketcan",
+                    channel=self.channel,
+                    receive_own_messages=False,
                 ) as bus:
                     self.store.on_connect()
                     while not self._stop.is_set():
                         msg = bus.recv(timeout=0.1)
                         if msg is not None:
+                            _, _, _, pgn, _ = parse_eid(msg.arbitration_id)
+                            if self.display_pgns and pgn not in self.display_pgns:
+                                continue
                             self.store.add(msg.arbitration_id, msg.data)
             except Exception:
                 self.store.on_disconnect()
-                # Wait 1 s before attempting to reconnect
                 if self._stop.wait(1.0):
-                    return  # stop() was called during the sleep
+                    return
 
     def stop(self):
         self._stop.set()
@@ -212,12 +233,18 @@ def spn_display_value(spn_spec: Dict[str, Any], val: Optional[float]) -> str:
 # ---------------------------------------------------------------------------
 
 def extract_numeric_spns(eid: int, data: bytes, dictionary: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return list of {name, value_str, unit} for displayable SPNs."""
+    """Return list of {name, value_str, unit} for displayable SPNs.
+
+    Skips the PGN entirely if its top-level ``display`` flag is false.
+    """
     _, _, _, pgn, _ = parse_eid(eid)
     pgn_str = str(pgn)
     results = []
     if pgn_str in dictionary:
         pgndef = dictionary[pgn_str]
+        # Respect PGN-level display flag --- skip the whole message if false
+        if not pgndef.get("display", True):
+            return results
         spns = pgndef.get("spns", {})
         for spn_id, spn_spec in spns.items():
             if not spn_spec.get("display", True):
