@@ -178,11 +178,13 @@ class CANThread(threading.Thread):
         channel: str = "can0",
         store: Optional[J1939MessageStore] = None,
         display_pgns: Optional[Set[int]] = None,
+        logger: Optional[Any] = None,
     ):
         super().__init__(daemon=True)
         self.channel = channel
         self.store = store or J1939MessageStore()
         self.display_pgns = display_pgns or set()
+        self.logger = logger
         self._stop = threading.Event()
 
     def run(self):
@@ -200,6 +202,9 @@ class CANThread(threading.Thread):
                     while not self._stop.is_set():
                         msg = bus.recv(timeout=0.1)
                         if msg is not None:
+                            # Log RAW (before any filtering)
+                            if self.logger is not None:
+                                self.logger.log(msg.arbitration_id, msg.data)
                             _, _, _, pgn, _ = parse_eid(msg.arbitration_id)
                             if self.display_pgns and pgn not in self.display_pgns:
                                 continue

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """J1939 Explorer — Terminal app for live CAN bus analysis (40×40)."""
+import os
 import subprocess
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +25,7 @@ from .j1939_can import (
     spn_display_value,
 )
 from .config import load_config, save_config
+from .logger import CANLogger, LOGS_DIR
 
 # ---------------------------------------------------------------------------
 # App constants
@@ -31,6 +34,7 @@ MODE_STATS = "stats"
 MODE_MESSAGES = "messages"
 MODE_LIVE = "live"
 MODE_CONFIG = "config"
+MODE_LOGS = "logs"
 
 # ---------------------------------------------------------------------------
 # Compact header (replaces Textual Header widget)
@@ -39,16 +43,22 @@ MODE_CONFIG = "config"
 class CompactHeader(Static):
     """Single line header with colored state letters."""
 
-    def update_header(self, title: str, mode: str, connected: bool, frozen: bool):
+    def update_header(
+        self, title: str, mode: str, connected: bool, frozen: bool, logging_active: bool
+    ):
         conn_char = "C" if connected else "D"
         conn_style = "green" if connected else "red"
         freeze_char = "." if not frozen else "F"
         freeze_style = "green" if not frozen else "red"
+        log_char = "L" if logging_active else "."
+        log_style = "green" if logging_active else "red"
         text = Text.assemble(
             f"{title} | {mode.upper()} | ",
             (conn_char, conn_style),
             " | ",
             (freeze_char, freeze_style),
+            " | ",
+            (log_char, log_style),
         )
         self.update(text)
 
@@ -64,6 +74,7 @@ class CompactFooter(Static):
             ("F1", "green"), ":S ",
             ("F2", "green"), ":M ",
             ("F3", "green"), ":L ",
+            ("F4", "green"), ":Log ",
             ("F5", "green"), ":Cfg ",
             ("Spc", "green"), ":Frz ",
             ("Q", "green"), ":Qt",
@@ -436,6 +447,98 @@ class ConfigScreen(Static):
 
 
 # ---------------------------------------------------------------------------
+# Replay thread
+# ---------------------------------------------------------------------------
+
+class ReplayThread(threading.Thread):
+    """Background thread that reads a dump file and injects messages."""
+
+    def __init__(
+        self,
+        filepath: str,
+        store: J1939MessageStore,
+        on_done: Optional[Any] = None,
+    ):
+        super().__init__(daemon=True)
+        self.filepath = filepath
+        self.store = store
+        self._stop = threading.Event()
+        self._on_done = on_done
+
+    def run(self):
+        try:
+            with open(self.filepath, "r") as f:
+                lines = [line.strip() for line in f if line.strip()]
+        except OSError:
+            if self._on_done:
+                self._on_done()
+            return
+        for line in lines:
+            if self._stop.is_set():
+                break
+            try:
+                eid_str, payload_hex = line.split("#", 1)
+                eid = int(eid_str, 16)
+                data = bytes.fromhex(payload_hex)
+                self.store.add(eid, data)
+            except (ValueError, IndexError):
+                continue
+            # 500 ms between messages
+            if self._stop.wait(0.5):
+                break
+        if self._on_done:
+            self._on_done()
+
+    def stop(self):
+        self._stop.set()
+
+
+# ---------------------------------------------------------------------------
+# Logging screen
+# ---------------------------------------------------------------------------
+
+class LoggingScreen(Static):
+    """Screen showing log files and replay controls."""
+
+    _file_list: List[str] = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="logs_container"):
+            yield Static("-- Log Files --", classes="bold")
+            yield DataTable(show_header=False, show_cursor=True, cursor_type="row", zebra_stripes=True, id="logs_table")
+            yield Static("")
+            yield Static("[p] Replay  [d] Delete", id="logs_help")
+
+    def on_mount(self):
+        table = self.query_one("#logs_table", DataTable)
+        table.add_column("File", width=20)
+        table.add_column("Size", width=8)
+        table.add_column("Age", width=5)
+
+    @property
+    def table(self) -> DataTable:
+        return self.query_one("#logs_table", DataTable)
+
+    def refresh_files(self):
+        self.table.clear()
+        self._file_list = []
+        logger = CANLogger()
+        files = logger.list_files()
+        for name, size, mtime in files:
+            size_kb = size / 1024
+            age_s = time.time() - mtime
+            age_str = f"{age_s:.0f}s" if age_s < 60 else f"{int(age_s // 60)}m"
+            self.table.add_row(f"{name}", f"{size_kb:.1f}kB", f"{age_str}", key=name)
+            self._file_list.append(name)
+
+    def selected_file(self) -> Optional[str]:
+        cursor = self.table.cursor_row
+        if cursor is not None and 0 <= cursor < len(self._file_list):
+            return self._file_list[cursor]
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Main App
 # ---------------------------------------------------------------------------
 
@@ -459,7 +562,7 @@ class ExplorerApp(App):
         background: white;
         color: black;
     }
-    StatsScreen, MessagesScreen, LiveScreen, ConfigScreen {
+    StatsScreen, MessagesScreen, LiveScreen, ConfigScreen, LoggingScreen {
         width: 100%;
         height: 1fr;
     }
@@ -476,14 +579,23 @@ class ExplorerApp(App):
     #config_container {
         padding: 0 1;
     }
+    #logs_container {
+        padding: 0 1;
+    }
+    #logs_table {
+        width: 100%;
+        height: 1fr;
+    }
     """
 
     BINDINGS = [
         ("f1", "switch_mode('stats')", ""),
         ("f2", "switch_mode('messages')", ""),
         ("f3", "switch_mode('live')", ""),
+        ("f4", "switch_mode('logs')", ""),
         ("f5", "switch_mode('config')", ""),
         ("space", "toggle_freeze", ""),
+        ("l", "toggle_logging", ""),
     ]
 
     def __init__(self, channel: str = "can0", **kwargs):
@@ -496,6 +608,10 @@ class ExplorerApp(App):
         self._update_timer = None
         self._frozen: bool = False
         self._display_pgns: set = set()
+        self._config: Dict[str, Any] = {}
+        self._logger = CANLogger()
+        self._replay_thread: Optional[ReplayThread] = None
+        self._replay_active = False
 
     def compose(self) -> ComposeResult:
         yield CompactHeader(id="header")
@@ -503,6 +619,7 @@ class ExplorerApp(App):
         yield MessagesScreen(id=MODE_MESSAGES)
         yield LiveScreen(id=MODE_LIVE)
         yield ConfigScreen(id=MODE_CONFIG)
+        yield LoggingScreen(id=MODE_LOGS)
         yield CompactFooter(id="footer")
 
     def on_mount(self):
@@ -515,6 +632,8 @@ class ExplorerApp(App):
         self._update_timer = self.set_interval(0.5, self._tick)
 
     def on_unmount(self):
+        if self._logger.is_active():
+            self._logger.stop()
         if self.can_thread is not None:
             self.can_thread.stop()
             self.can_thread.join(timeout=1.0)
@@ -523,6 +642,12 @@ class ExplorerApp(App):
         if event.key == "q":
             event.stop()
             self.exit()
+        # Replay / Delete shortcuts only on logs screen
+        if self.explorer_mode == MODE_LOGS:
+            if event.key == "p":
+                self._replay_selected_log()
+            elif event.key == "d":
+                self._delete_selected_log()
 
     def action_switch_mode(self, mode: str):
         self._set_mode(mode)
@@ -535,9 +660,18 @@ class ExplorerApp(App):
         else:
             self.notify("Resumed", severity="information", timeout=1)
 
+    def action_toggle_logging(self):
+        if self._logger.is_active():
+            self._logger.stop()
+            self.notify("Logging stopped", severity="information", timeout=1)
+        else:
+            path = self._logger.start()
+            self.notify(f"Logging to {os.path.basename(path)}", severity="information", timeout=2)
+        self._update_header()
+
     def _set_mode(self, mode: str):
         self.explorer_mode = mode
-        for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE, MODE_CONFIG):
+        for m in (MODE_STATS, MODE_MESSAGES, MODE_LIVE, MODE_CONFIG, MODE_LOGS):
             screen = self.query_one(f"#{m}", Static)
             screen.display = (m == mode)
         # Restore focus to the DataTable when returning to Messages screen
@@ -549,13 +683,24 @@ class ExplorerApp(App):
             config_screen.refresh_config(self._config)
             iface_input = config_screen.query_one("#config_iface_input", Input)
             iface_input.focus()
+        elif mode == MODE_LOGS:
+            logs_screen = self.query_one(f"#{MODE_LOGS}", LoggingScreen)
+            logs_screen.refresh_files()
+            if logs_screen._file_list:
+                logs_screen.table.focus()
         self._update_header()
 
     def _update_header(self):
         header = self.query_one("#header", CompactHeader)
         stats = self.store.stats()
+        # During replay, force connection indicator to 'R' (green)
+        connected = True if self._replay_active else stats["connected"]
         header.update_header(
-            self.title, self.explorer_mode, stats["connected"], self._frozen
+            self.title,
+            self.explorer_mode,
+            connected,
+            self._frozen,
+            self._logger.is_active(),
         )
 
     def _start_can(self):
@@ -563,6 +708,7 @@ class ExplorerApp(App):
             channel=self._channel,
             store=self.store,
             display_pgns=self._display_pgns,
+            logger=self._logger,
         )
         self.can_thread.start()
 
@@ -575,7 +721,49 @@ class ExplorerApp(App):
                 self.query_one(f"#{MODE_MESSAGES}", MessagesScreen).refresh_messages(self.store)
             elif mode == MODE_LIVE:
                 self.query_one(f"#{MODE_LIVE}", LiveScreen).refresh_live(self.store, self.dictionary)
+            elif mode == MODE_LOGS:
+                self.query_one(f"#{MODE_LOGS}", LoggingScreen).refresh_files()
         self._update_header()
+
+    # --- replay / delete from logging screen ---
+
+    def _replay_selected_log(self):
+        logs_screen = self.query_one(f"#{MODE_LOGS}", LoggingScreen)
+        filename = logs_screen.selected_file()
+        if not filename:
+            self.notify("No file selected", severity="warning", timeout=1)
+            return
+        filepath = CANLogger().file_path(filename)
+        # Bring socketcan down before replay
+        iface = self._config.get("socketcan_interface", "can0")
+        try:
+            subprocess.run(["sudo", "ip", "link", "set", "down", iface], check=True)
+        except subprocess.CalledProcessError:
+            pass
+        # Mark replay active (shows 'R' in header)
+        self._replay_active = True
+        self._update_header()
+        self.notify(f"Replaying {filename}...", severity="information", timeout=2)
+
+        def on_replay_done():
+            self._replay_active = False
+            self._update_header()
+            self.notify("Replay done", severity="information", timeout=1)
+
+        self._replay_thread = ReplayThread(filepath, self.store, on_done=on_replay_done)
+        self._replay_thread.start()
+
+    def _delete_selected_log(self):
+        logs_screen = self.query_one(f"#{MODE_LOGS}", LoggingScreen)
+        filename = logs_screen.selected_file()
+        if not filename:
+            self.notify("No file selected", severity="warning", timeout=1)
+            return
+        if CANLogger().delete_file(filename):
+            logs_screen.refresh_files()
+            self.notify(f"Deleted {filename}", severity="information", timeout=1)
+        else:
+            self.notify("Delete failed", severity="error", timeout=1)
 
 
 # ---------------------------------------------------------------------------
