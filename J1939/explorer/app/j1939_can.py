@@ -82,6 +82,14 @@ class J1939MessageStore:
         with self._lock:
             self._bus_connected = False
 
+    def clear_all(self):
+        """Reset all accumulated data (messages, counters, timestamps)."""
+        with self._lock:
+            self.messages.clear()
+            self.timestamps_window.clear()
+            self._total_messages = 0
+            self._start = time.time()
+
     def check_link_status(self, iface: str = "can0") -> str:
         """Check interface state via ip link."""
         try:

@@ -112,6 +112,16 @@ class StatsScreen(Static):
             yield Static("EID: --", id="stats_count")
             yield Static("SA : --", id="stats_devices")
             yield Static("PGN: --", id="stats_pgns")
+            yield Static("")
+            with Horizontal(id="stats_clear_row"):
+                yield Button("Clear", id="stats_clear_btn", variant="error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        app = self.app
+        if not isinstance(app, ExplorerApp):
+            return
+        if event.button.id == "stats_clear_btn":
+            app._clear_stats()
 
     def update_stats(self, stats: Dict[str, Any], link_status: str = "UNKNOWN"):
         self.query_one("#stats_connected", Static).update(
@@ -704,6 +714,12 @@ class ExplorerApp(App):
     #stats_container {
         padding: 0 1;
     }
+    #stats_clear_row {
+        height: auto;
+    }
+    #stats_clear_row Button {
+        width: 1fr;
+    }
     #config_container {
         padding: 0 1;
     }
@@ -799,6 +815,17 @@ class ExplorerApp(App):
             path = self._can_logger.start()
             self.notify(f"Logging to {os.path.basename(path)}", severity="information", timeout=2)
         self._update_header()
+
+    def _clear_stats(self):
+        self.store.clear_all()
+        self.notify("Stats cleared", severity="information", timeout=1)
+        self._update_header()
+        # Clear MessagesScreen table too since it mirrors the store
+        messages_screen = self.query_one(f"#{MODE_MESSAGES}", MessagesScreen)
+        messages_screen.table.clear()
+        messages_screen._eid_list = []
+        messages_screen._last_data_by_eid = {}
+        messages_screen.detail.update("Select a message")
 
     def _set_mode(self, mode: str):
         self.explorer_mode = mode
