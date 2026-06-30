@@ -192,7 +192,7 @@ def decode_spn(data: bytes, spn_spec: Dict[str, Any]) -> Optional[float]:
 def spn_display_value(spn_spec: Dict[str, Any], val: float) -> str:
     unit = spn_spec.get("unit", "")
     fmt = "{:.2f}" if abs(val - round(val)) > 0.005 else "{:.0f}"
-    return f"{fmt.format(val)}{unit}"
+    return f"{fmt.format(val)} {unit}"
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +215,7 @@ def extract_numeric_spns(eid: int, data: bytes, dictionary: Dict[str, Any]) -> L
                 unit = spn_spec.get("unit", "")
                 fmt = "{:.2f}" if abs(val - round(val)) > 0.005 else "{:.0f}"
                 raw_val = val
-                value_str = f"{fmt.format(val)}{unit}"
+                value_str = f"{fmt.format(val)} {unit}"
                 label = f"{spn_spec.get('nickname', spn_id)} ({spn_spec.get('description', '')})"
                 results.append({
                     "spn_id": spn_id,
