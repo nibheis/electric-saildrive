@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional
 from rich.text import Text
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical, Horizontal
 from textual.widgets import DataTable, Static, Input, Button
 
@@ -318,7 +317,9 @@ class LiveScreen(Static):
 # ---------------------------------------------------------------------------
 
 class ConfigScreen(Static):
-    """Screen to configure socketcan interface and bitrate."""
+    """Screen to configure socketcan interface and bitrate.
+    Uses a compact vertical layout for 40-column terminals.
+    """
 
     _config: Dict[str, Any] = {}
 
@@ -328,16 +329,20 @@ class ConfigScreen(Static):
             yield Static("Status: --", id="config_interface_status")
             yield Static("")
             yield Static("-- Settings --", classes="bold")
-            with Horizontal(id="config_iface_row"):
-                yield Static("Iface     :", id="config_iface_label")
-                yield Input(value="can0", id="config_iface_input")
-            with Horizontal(id="config_bitrate_row"):
-                yield Static("Bitrate   :", id="config_bitrate_label")
-                yield Input(value="250000", id="config_bitrate_input")
+            yield Static("Iface: can0", id="config_iface_value")
+            yield Static("Bitrt: 250000", id="config_bitrate_value")
+            yield Static("-- Edit --", classes="bold")
+            yield Input(
+                placeholder="Interface",
+                id="config_iface_input",
+            )
+            yield Input(
+                placeholder="Bitrate (bps)",
+                id="config_bitrate_input",
+            )
             yield Static("")
-            with Horizontal(id="config_buttons"):
-                yield Button("Apply", id="config_apply_btn", variant="primary")
-                yield Button("Revert", id="config_revert_btn", variant="default")
+            yield Button("Apply", id="config_apply_btn", variant="primary")
+            yield Button("Revert", id="config_revert_btn", variant="default")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "config_apply_btn":
@@ -352,6 +357,12 @@ class ConfigScreen(Static):
         )
         self.query_one("#config_bitrate_input", Input).value = str(
             config.get("can_bitrate", 250000)
+        )
+        self.query_one("#config_iface_value", Static).update(
+            f"Iface: {config.get('socketcan_interface', 'can0')}"
+        )
+        self.query_one("#config_bitrate_value", Static).update(
+            f"Bitrt: {config.get('can_bitrate', 250000)}"
         )
         self._update_status()
 
@@ -397,6 +408,8 @@ class ConfigScreen(Static):
                 self.app.notify(f"Interface error: {exc}", severity="error", timeout=3)
             return
         save_config(self._config)
+        self.query_one("#config_iface_value", Static).update(f"Iface: {iface}")
+        self.query_one("#config_bitrate_value", Static).update(f"Bitrt: {bitrate}")
         if self.app:
             self.app.notify("Settings applied", severity="information", timeout=2)
         self._update_status()
@@ -409,6 +422,12 @@ class ConfigScreen(Static):
         )
         self.query_one("#config_bitrate_input", Input).value = str(
             new_config.get("can_bitrate", 250000)
+        )
+        self.query_one("#config_iface_value", Static).update(
+            f"Iface: {new_config.get('socketcan_interface', 'can0')}"
+        )
+        self.query_one("#config_bitrate_value", Static).update(
+            f"Bitrt: {new_config.get('can_bitrate', 250000)}"
         )
         self._update_status()
         if self.app:
@@ -459,12 +478,11 @@ class ExplorerApp(App):
     """
 
     BINDINGS = [
-        Binding("f1", "switch_mode('stats')", ""),
-        Binding("f2", "switch_mode('messages')", ""),
-        Binding("f3", "switch_mode('live')", ""),
-        Binding("f5", "switch_mode('config')", ""),
-        Binding("space", "toggle_freeze", ""),
-        Binding("q", "quit", "", priority=True),
+        ("f1", "switch_mode('stats')", ""),
+        ("f2", "switch_mode('messages')", ""),
+        ("f3", "switch_mode('live')", ""),
+        ("f5", "switch_mode('config')", ""),
+        ("space", "toggle_freeze", ""),
     ]
 
     def __init__(self, channel: str = "can0", **kwargs):
@@ -499,6 +517,11 @@ class ExplorerApp(App):
         if self.can_thread is not None:
             self.can_thread.stop()
             self.can_thread.join(timeout=1.0)
+
+    def on_key(self, event) -> None:
+        if event.key == "q":
+            event.stop()
+            self.exit()
 
     def action_switch_mode(self, mode: str):
         self._set_mode(mode)
