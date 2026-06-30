@@ -44,10 +44,15 @@ class CompactHeader(Static):
     """Single line header with colored state letters."""
 
     def update_header(
-        self, title: str, mode: str, connected: bool, frozen: bool, logging_active: bool
+        self, title: str, mode: str, connected: bool, frozen: bool,
+        logging_active: bool, replay_active: bool = False,
     ):
-        conn_char = "C" if connected else "D"
-        conn_style = "green" if connected else "red"
+        if replay_active:
+            conn_char = "R"
+            conn_style = "green"
+        else:
+            conn_char = "C" if connected else "D"
+            conn_style = "green" if connected else "red"
         freeze_char = "." if not frozen else "F"
         freeze_style = "green" if not frozen else "red"
         log_char = "L" if logging_active else "."
@@ -783,14 +788,13 @@ class ExplorerApp(App):
     def _update_header(self):
         header = self.query_one("#header", CompactHeader)
         stats = self.store.stats()
-        # During replay, force connection indicator to 'R' (green)
-        connected = True if self._replay_active else stats["connected"]
         header.update_header(
             self.title,
             self.explorer_mode,
-            connected,
+            stats["connected"],
             self._frozen,
             self._can_logger.is_active(),
+            self._replay_active,
         )
 
     def _start_can(self):
