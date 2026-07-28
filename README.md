@@ -3,7 +3,7 @@
 This repository contains information on how to build and electric saildrive.
 This saildrive will be built using standard components.
 
-More information (photos, comments, etc.) will be published in our blog: [agile4life.blog](https://agile4life.blog/)
+More information (photos, comments, etc.) will be published in our blog: [agile4life.blog|technical](https://agile4life.blog/tag/technical/)
 
 For information on selected components, check the `components` directory:
 
