@@ -3,7 +3,7 @@
 ## ENGIRO 205W-04013-ABC with VESC Maxim 120
 
 **Application:** Electric Saildrive Propulsion  
-**Date:** July 2026  
+**Date:** July 2026 — updated September 2026 (PID speed control + throttle/encoder settings) 
 **Configuration:** FOC (Field Oriented Control) with Sin/Cos Encoder
 
 ---
@@ -125,23 +125,23 @@
 
 ### 2.2 Encoder Configuration (Sin/Cos)
 
-The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be connected **directly** without a voltage divider.
+The encoder signal is **reduced from 5 V to 3.3 V on the ADC input pins** (attenuator at the inverter inputs). The values below are the **calibrated** values for this installation and sit lower than the ENGIRO datasheet values. Do **not** replace them with the datasheet values or the earlier "1.25 V / 2.5 V" recommendations of this guide.
 
 | Setting | Value | Parameter Name | Notes |
 |---|---|---|---|
-| **Sine Amplitude** | **1.25 V** | `m_encoder_sin_amp` | 2.5 Vpp / 2. Default VESC value is 1.0 V, adjust to match your encoder |
-| **Sine Offset** | **2.5 V** | `m_encoder_sin_offset` | 50% of 5 V supply. Default VESC value is 1.65 V, adjust to match your encoder |
-| **Cosine Amplitude** | **1.25 V** | `m_encoder_cos_amp` | Should match sine amplitude |
-| **Cosine Offset** | **2.5 V** | `m_encoder_cos_offset` | Should match sine offset |
+| **Sine Amplitude** | **1.0 V** | `m_encoder_sin_amp` | Calibrated for this installation (see attenuator note above) |
+| **Sine Offset** | **1.65 V** | `m_encoder_sin_offset` | Calibrated for this installation (see attenuator note above) |
+| **Cosine Amplitude** | **1.0 V** | `m_encoder_cos_amp` | Should match sine amplitude |
+| **Cosine Offset** | **1.65 V** | `m_encoder_cos_offset` | Should match sine offset |
 | **Sin/Cos Filter** | **0.5** | `m_encoder_sincos_filter_constant` | 0 = most filtering/lag, 1 = no filtering. Default is usually fine. |
 | **Sin/Cos Phase Correction** | **0 deg** | `m_encoder_sincos_phase_correction` | Adjust if sin/cos signals have phase mismatch (-45 to +45 deg) |
 | **Encoder Offset** | **Measured during detection** | `foc_encoder_offset` | FOC wizard will auto-detect. Range: 0 - 360 deg |
-| **Encoder Ratio** | **1** | `foc_encoder_ratio` | Encoder cycles per motor pole-pair. For 1:1 direct encoder: 1. For 4 pole-pairs with 1 rev/cycle: ratio = 1 |
+| **Encoder Ratio** | **4** | `foc_encoder_ratio` | Ratio between encoder and motor = pole pairs for the Type E encoder (1 cycle per mechanical rev); auto-detected correctly by the FOC wizard |
 | **Encoder Inverted** | **No** | `foc_encoder_inverted` | Toggle if motor spins in wrong direction with correct phase wiring |
 
-> **Note on amplitude defaults:** The ENGIRO encoder outputs 2.5 Vpp (1.25 V amplitude) with 2.5 V offset. VESC Tool defaults are 1.0 V amplitude and 1.65 V offset. **You must manually adjust these values** to match the ENGIRO Type E encoder specifications.
+> **Note on amplitude defaults:** Earlier revisions of this guide assumed the sensor is connected directly at 5 V levels (1.25 V amplitude / 2.5 V offset). That is **outdated for this installation** — see the attenuator note above.
 >
-> **Note on encoder ratio:** For the ENGIRO 205W Type E encoder (1 sine/cosine cycle per mechanical revolution, 4 pole pairs), the ratio can be set to **1** if the FOC wizard correctly identifies the relationship. Some VESC versions calculate this automatically during detection.
+> **Note on encoder ratio:** VESC Tool documents the ratio as pole pairs for a directly attached encoder (e.g. 14 pole motor => ratio 7). The FOC wizard detected **4** for this motor, which matches the 4 pole pairs — keep it.
 
 #### Encoder Wiring
 
@@ -160,7 +160,7 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 
 | Setting | Value | Notes |
 |---|---|---|
-| **Max ERPM** | **14,000** | 3300 RPM x 4 pole pairs = 13,200. Extra margin added. |
+| **Max ERPM** | **13,000** | Round cap just under the ~1550 propeller-RPM design limit (1550 x 2.13 x 4 = 13,208 ERPM). Reverse limited symmetrically (-13,000). |
 | **Max Duty Cycle** | 95% | |
 
 > **No Field Weakening Required:** At 3300 RPM, the motor back-EMF is only ~26 Vrms (line-to-line), which is well below the battery voltage. Field weakening should remain **disabled**.
@@ -170,10 +170,10 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 | Setting | Value | Notes |
 |---|---|---|
 | **Motor Current Max** | **400 A** | VESC Maxim 120 continuous limit. This equals ~283 A phase RMS, which is below the motor's 310 A continuous rating. Motor is thermally safe. |
-| **Motor Current Max Brake** | **400 A** | Set according to regen and mechanical constraints. |
+| **Motor Current Max Brake** | **-50 A** | Conservative brake/regen limit; blade drag does most of the deceleration in water. |
 | **Absolute Maximum Current** | **600 A** | VESC pulsed limit (10-30s depending on cooling). Well within motor's 960 A capability. |
-| **Battery Current Max** | **300 A** | Set to ~250-300 A (based on 12 kW / 51 V). Do not exceed your BMS limit. |
-| **Battery Current Max Regen** | Per BMS | Check your LiFePO4 BMS charge current limit. |
+| **Battery Current Max** | **350 A** | Current VESC setting. The eco-mode script toggles it over CAN between **350 A (std)** and **240 A (eco)**. |
+| **Battery Current Max Regen** | **-50 A** | Regen limit fed back to the battery. |
 
 > **Important:** The VESC input current limit is 400 A. If your BMS maximum discharge current is lower than 300 A, set the battery current limit to the BMS value.
 
@@ -181,10 +181,12 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 
 | Setting | Value | Notes |
 |---|---|---|
-| **Minimum Input Voltage** | **40 V** | LiFePO4 empty (~2.5 V/cell). Prevents over-discharge. |
-| **Maximum Input Voltage** | **60 V** | Safely above max charge (57.6 V) but below VESC 120 V max. |
+| **Minimum Input Voltage** | **20 V** | Under-voltage fault threshold (kept from VESC default; hardware undervoltage protection applies first). |
+| **Maximum Input Voltage** | **112 V** | Over-voltage fault threshold (kept from VESC default, below the 120 V hardware limit). |
 | **Battery Voltage Cutoff Start** | **42 V** | ~2.6 V/cell. Start reducing power. |
 | **Battery Voltage Cutoff End** | **40 V** | ~2.5 V/cell. Hard cutoff. |
+| **Battery Voltage Regen Cutoff Start** | **56 V** | Above max charge (57.6 V); protects the pack from regen overcharge. |
+| **Battery Voltage Regen Cutoff End** | **58 V** | Regen current not allowed above this voltage. |
 
 ### 2.6 Temperature Limits
 
@@ -193,8 +195,9 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 | Setting | Value | Parameter Name | Notes |
 |---|---|---|---|
 | **Motor Temp Sensor Type** | **KTY84/130** | `m_motor_temp_sens_type` | Select "KTY84/130" from dropdown (enum value: 4) |
-| **Motor Temp Cutoff Start** | **110 degC** | `l_temp_motor_start` | Start derating early to protect motor |
-| **Motor Temp Cutoff End** | **140 degC** | `l_temp_motor_end` | Motor absolute maximum from datasheet |
+| **Motor Temp Cutoff Start** | **85 degC** | `l_temp_motor_start` | Start derating early to protect motor (conservative; kept from VESC default) |
+| **Motor Temp Cutoff End** | **100 degC** | `l_temp_motor_end` | Motor current not allowed above this (conservative; datasheet allows higher) |
+| **KTY84 Base Resistance** | **600 Ω** | `m_ntcx_ptcx_res` | KTY84-130 resistance at the base temperature (25 degC) |
 
 #### VESC (MOSFET) Temperature
 
@@ -212,7 +215,7 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 | Setting | Value | Parameter Name | Notes |
 |---|---|---|---|
 | **PWM Switching Frequency** | **30 kHz** | `foc_f_sw` or hardware default | Matches Maxim 120 typical rating |
-| **MTPA Mode** | **IQ Measured** | `foc_mtpa_mode` | Select "IQ Measured" from dropdown (enum value: 2) for best performance |
+| **MTPA Mode** | **Disabled** | `foc_mtpa_mode` | Value 0 (current setting); can be re-enabled later for fine-tuning |
 | **Field Weakening Current Max** | **0 A** | `foc_fw_current_max` | Disabled. Not needed for this application |
 | **Field Weakening Duty Start** | **90%** | `foc_fw_duty_start` | Only active if FW current > 0. Not applicable here |
 | **Observer Type** | **Ortega Lambda Comp** | `foc_observer_type` | Default value: 3 (FOC_OBSERVER_ORTEGA_LAMBDA_COMP). Usually best for PMSM |
@@ -225,14 +228,33 @@ The VESC Maxim 120 ADC inputs are **5.5 V tolerant**, so the encoder can be conn
 
 ### 2.8 App / Control Settings
 
-| Setting | Recommendation |
-|---|---|
-| **Control Type** | Current Control (recommended for propeller load) |
-| **Input Device** | Throttle (ADC1, Pin 9) |
-| **Direction** | Forward only (unless reverse is needed for maneuvering) |
-| **Throttle Curve** | Smooth / exponential (avoid aggressive ramping due to propeller inertia) |
+**Control mode: PID Speed Reverse Center (`app_adc_conf.ctrl_type` = 13), applied September 2026.**
+It replaces the initial current-control setup. The throttle lever maps directly to a target ERPM
+between the speed limits (`l_min_erpm` .. `l_max_erpm`); throttle center is 0 speed.
 
-> In the VESC Setup Wizard, answer **"Yes"** to direct drive. The propeller is a direct mechanical load through the saildrive reduction.
+| Setting | Value | Parameter Name |
+|---|---|---|
+| **Control Type** | **PID Speed Reverse Center** (13) | `app_adc_conf.ctrl_type` |
+| **Input Device** | Throttle (ADC1, Pin 9) | — |
+| **Max ERPM (full lever)** | **13,000** | `l_max_erpm` |
+| **Input Deadband** | **0.03** | `app_adc_conf.hyst` |
+| **Throttle Curve** | S-curve, exp -3 | `app_adc_conf.throttle_exp`, `throttle_exp_brake`, `throttle_exp_mode` |
+| **Ramp Times** | 0.3 s / 0.1 s | `app_adc_conf.ramp_time_pos`, `ramp_time_neg` |
+| **Safe Start** | Pulses + after fault (value 2) | `app_adc_conf.safe_start` |
+| **Sampling** | 500 Hz, filtered | `app_adc_conf.update_rate_hz`, `use_filter` |
+
+Speed (RPM) PID controller (running at `sp_pid_loop_rate` = 1000 Hz):
+
+| Setting | Value | Parameter Name |
+|---|---|---|
+| **Kp / Ki / Kd** | 0.004 / 0.004 / 0.0001 (VESC defaults for now) | `s_pid_kp`, `s_pid_ki`, `s_pid_kd` |
+| **Minimum ERPM** | **500** — below this ERPM the speed controller is disabled | `s_pid_min_erpm` |
+| **Ramp Speed** | **6,000 erpm/s** — soft ramp-down when the lever returns to neutral; water drag on the blades brakes the prop, so no aggressive motor braking | `s_pid_ramp_erpms_s` |
+| **Allow Braking** | 1 (needed for reverse through center) | `s_pid_allow_braking` |
+| **Speed Source** | PLL (value 0) | `s_pid_speed_source` |
+
+Eco mode: the throttle-button script toggles `l-in-current-max` over CAN between **350 A (std)**
+and **240 A (eco)**; it only caps battery current, not speed.
 
 ---
 
@@ -277,7 +299,7 @@ After detection completes, verify these auto-detected parameters:
   - lambda = Phase Ke / (pole pairs) = 0.0185 / 4 = **0.0046 V*s/rad** (= **4.6 mWb**)
   - Verify detected value is close to this theoretical value (expect ~4-5 mWb)
 - **`foc_encoder_offset`** — Should be a value between 0-360 degrees
-- **`foc_current_kp`** and **`foc_current_ki`** — Current controller gains (auto-tuned)
+- **`foc_current_kp`** and **`foc_current_ki`** — Current controller gains (auto-tuned; latest values in this installation: KP 0.0649 / KI 4.24)
 - **`foc_observer_gain`** — Observer gain (auto-tuned)
 
 18. Check motor direction with **FWD / REV** buttons
@@ -378,14 +400,17 @@ After detection completes, verify these auto-detected parameters:
 - [ ] `foc_encoder_offset` value present (0-360 deg range)
 - [ ] Motor direction verified correct
 - [ ] Sin/Cos encoder readings stable (check in Realtime Data)
-- [ ] `m_encoder_sin_amp` = 1.25 V, `m_encoder_sin_offset` = 2.5 V
-- [ ] `m_encoder_cos_amp` = 1.25 V, `m_encoder_cos_offset` = 2.5 V
+- [ ] `m_encoder_sin_amp` = 1.0 V, `m_encoder_sin_offset` = 1.65 V
+- [ ] `m_encoder_cos_amp` = 1.0 V, `m_encoder_cos_offset` = 1.65 V
 - [ ] KTY84-130 temperature reading accurate at ambient
 - [ ] `m_motor_temp_sens_type` = **KTY84/130** (value 4)
-- [ ] Max ERPM set to 14,000
+- [ ] Max ERPM set to 13,000 (reverse -13,000)
 - [ ] Motor current max set to 400 A
-- [ ] Battery current max set appropriately (<= BMS limit)
-- [ ] Voltage limits configured (40-60 V)
+- [ ] Battery current max set to 350 A (240 A in eco mode, toggled over CAN)
+- [ ] Voltage limits configured (regen cutoff 56-58 V)
+- [ ] Control type = PID Speed Reverse Center (value 13)
+- [ ] Input deadband = 0.03, APP max voltage = 3.5 V
+- [ ] s_pid_min_erpm = 500, s_pid_ramp_erpms_s = 6,000 erpm/s, allow braking = 1
 - [ ] Temperature protection enabled
 - [ ] Field weakening disabled (`foc_fw_current_max` = 0)
 
@@ -434,6 +459,7 @@ After detection completes, verify these auto-detected parameters:
 | Motor does not rotate | Wrong phase/sensor order | Check ENGIRO Table 3 (U-V-W) and sensor wiring |
 | | Sensor fault | Check encoder signals in Realtime Data |
 | | Insufficient voltage | Check battery state of charge |
+| Throttle lever moves / motor does not rotate (VESC Tool experiments dead too) | APP_ADC input-range check failing (`app_adc_conf.voltage_min` = 0 with `voltage_max` = 0): the app drops **all** commands and re-applies brake = 0 at 500 Hz | Set "Max Voltage" above the throttle maximum (fixed here at the 3.5 V default). The FOC detector is unaffected (runs under lock) |
 | Motor rotates wrong direction | Phase or sensor inversion | Use "Inverted" toggle in VESC Tool |
 | High vibration / noise | Unbalanced propeller | Check propeller and shaft alignment |
 | | Bad FOC parameters | Re-run detection wizard |
@@ -445,8 +471,8 @@ After detection completes, verify these auto-detected parameters:
 | Temperature reading wrong | KTY polarity reversed | Check polarity - KTY is polarized |
 | | Wrong sensor type selected | Verify KTY84-130 selected in VESC Tool |
 | Encoder fault/error | Poor signal connection | Check wiring and shield grounding |
-| | Amplitude/offset wrong | Verify `m_encoder_sin_amp` = 1.25 V, `m_encoder_sin_offset` = 2.5 V |
-| | | Verify `m_encoder_cos_amp` = 1.25 V, `m_encoder_cos_offset` = 2.5 V |
+| | Amplitude/offset wrong | Verify `m_encoder_sin_amp` = 1.0 V, `m_encoder_sin_offset` = 1.65 V |
+| | | Verify `m_encoder_cos_amp` = 1.0 V, `m_encoder_cos_offset` = 1.65 V |
 
 ---
 
