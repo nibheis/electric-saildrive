@@ -2,21 +2,21 @@
 
 ; Global variables
 (def print-prefix  "ESP: ")
-(def init-done  false)
-(def j1939-ecu-sa  0x00)    ; STM32 (main ECU on J1939)
-(def j1939-ecu2-sa 0x01)    ; ESP32 (here)
+(def j1939-ecu-sa 0x00)         ; VESC STM J1939 Address (0x00) / J1939 Motor #1 on the Veratron gateway
+(def j1939-ecu2-sa 0x01)        ; VESC ESP J1939 Address (0x01) [HERE]
 
-; Pins related
+; Pins related variables
 (def power-on  1)
 (def power-off 0)
-(def pin-power-can 0) ; ESP IO0 / pin #18 => CAN bus
-(def pin-power-n2k 1) ; ESP IO1 / pin #19 => N2K bus
+(def pin-power-can 0) ; ESP IO0 / pin #18 => CAN bus power
+(def pin-power-n2k 1) ; ESP IO1 / pin #19 => N2K bus power
+(def pin-power-eco 2) ; ESP IO2 / pin #31 => ECO mode LED indicator
 
-; Buttons/Switches relates
-(def io-pin-throttle-button 10) ; Active low / PU (IOEXP P10 / pin #13)
+; Buttons/Switches related variables
+(def io-pin-throttle-button 10) ; Active low / Pull-Up (IOEXP Pin #10 / VESC pin #13)
 (def pu-pin-pressed 0)
 (def pu-pin-opened  1)
-;(def pu-pin-double  2)
+
 
 ; Lib for IOEXP pins
 (import "pkg@://vesc_packages/lib_tca9535/tca9535.vescpkg" 'tca9535)
@@ -29,13 +29,18 @@
         (tca9535-write-pins '(17 1))
         (var sum (tca9535-read-pins io-pin-throttle-button))
         (sleep 0.02)
-        (tca9535-write-pins '(17 1))
+        ; TODO: should not be necessary
+        ;(tca9535-write-pins '(17 1))
         (var sum (+ sum (tca9535-read-pins io-pin-throttle-button)))
         (sleep 0.02)
-        (tca9535-write-pins '(17 1))
+        ; TODO: should not be necessary
+        ;(tca9535-write-pins '(17 1))
         (var sum (+ sum (tca9535-read-pins io-pin-throttle-button)))
+        ; Turn off power on pin #17
+        (tca9535-write-pins '(17 0))
         (if (< sum 2) {
-            (sleep 0.6)
+            ; TODO: remove this line:
+            ;(sleep 0.6)
             pu-pin-pressed
         } {
             pu-pin-opened
@@ -43,7 +48,7 @@
 })
 
 (defun send-j1939-request () {
-    (var pgn      0xEA)   ; CAN request with DA 0x00 (STM32)
+    (var pgn      0xEA)   ; CAN request
     (var priority    3)   ; 3, because I decided
 
     ; This is not a standard J1939 request
@@ -56,19 +61,47 @@
     (var eid (bits-enc-int eid 16 pgn 10))         ; PGN
     (var eid (bits-enc-int eid 26 priority 3))     ; PRIO
 
-    ; Let's send "0x01 0x02 0x03" to indicate the button was pushed
-    (var data (list 0x01 0x02 0x03))
+    ; For now, data is ignored on the STM.
+    ; This request alone means that user requested ECO mode to be toggled.
+    (var data (list 0x00 0x00 0x00))
     (can-send-eid eid data)
 })
 
+; function that launches a loop to monitor buttons
 (defun launch-thread-reader () {
     (loopwhile-thd ("PinReader" 150) true {
         (var pushed (read-throttle-button))
         ;(if (eq pushed pu-pin-pressed) (print "Pushed"))
         (if (eq pushed pu-pin-pressed) (send-j1939-request))
-        ;(if (eq pushed pu-pin-double) (print "Pushed - Double"))
         (sleep 0.08)
     })
+})
+
+; Handler for incoming J1939 REQUEST
+(defun j1939-request (eid data) {
+    (if (eq eid 216662272i32) { ; 0x0CEA0100 (Coming from STM)
+        ; 3-byte payload from STM:
+        ; 0x00 0x00 0x01 means ECO mode is ON
+        ; 0x00 0x00 0x00 means ECO mode is OFF
+        (if (eq data [0x00 0x00 0x01]) (set-eco-on))
+        (if (eq data [0x00 0x00 0x00]) (set-eco-off))
+    })
+    (free data)
+)}
+
+; This function waits for events and calls the appropriate handler
+(defun event-handler () (loopwhile true
+    (recv
+        ((event-can-eid (? eid) . (? data)) (j1939-request eid data))
+        (_ nil) ; ignore other events
+)))
+
+; This function initialises the event handler
+(defun init-event-handler () {
+    (event-enable 'event-can-eid)
+    (print "events enabled")
+    (event-register-handler (spawn 150 event-handler))
+    (print "handler registered")
 })
 
 ; Set 'output' mode on given ESP pin
@@ -86,39 +119,56 @@
 (defun init-output-pins () {
     (set-mode-output pin-power-can)
     (set-mode-output pin-power-n2k)
+    (set-mode-output pin-power-eco)
 })
 
+; This function initialises the IO expander on the ESP
 (defun init-io-expander () {
     ; No need to stop UART - deactivated on boot since FW 7.00 git #ecc95abc
+    ; IO expander is connected to ESP pins #20 and #21
     (tca9535-init 0x20 'rate-100k 21 20)
+    ; Set io-0 as output high
     (tca9535-set-dir '(17 out))
+    (tca9535-write-pins '(17 0))
 })
 
-(defun init () {
-    (init-io-expander)
-    (init-output-pins)
-    (launch-thread-reader)
-})
-
-(defun manage-buses () {
+; This function turn the power ON on CAN and N2K buses
+(defun init-buses () {
     ; Power on both buses
     (set-power-state pin-power-can power-on)
     (set-power-state pin-power-n2k power-on)
 })
 
+; Turn ECO mode LED off
+(defun set-eco-off () {
+    (set-power-state pin-power-eco power-off)
+})
 
+; Turn ECO mode LED on
+(defun set-eco-on () {
+    (set-power-state pin-power-eco power-on)
+})
+
+; Global init function
+(defun init () {
+    (init-io-expander)
+    (init-output-pins)
+    (launch-thread-reader)
+    (init-buses)
+    (set-eco-off)
+    (init-event-handler)
+})
+
+; Main function
 (defun main () {
     (set-print-prefix print-prefix)
     (init)
-    (print "Init done on IOEXP")
+    (print "Init done")
 
-    (def init-done true)
-    (print "IOEXP set as ready")
-
+    ; Ensure buses are always powered on
     (loopwhile true {
-        (manage-buses)
-        (print "Sending power on CAN and NMEA buses")
-        (sleep 10)
+        (init-buses)
+        (sleep 30)
     })
 })
 

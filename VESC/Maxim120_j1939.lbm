@@ -5,7 +5,8 @@
 
 ; J1939
 (def j1939-active false)
-(def j1939-ecu-sa 0x00)         ; VESC Source Address (main ECU: 0x00) / J1939 Motor #1 on the Veratron gateway
+(def j1939-ecu-sa 0x00)         ; VESC STM J1939 Address (0x00) / J1939 Motor #1 on the Veratron gateway [HERE]
+(def j1939-ecu2-sa 0x01)        ; VESC ESP J1939 Address (0x01)
 
 ; Eco mode
 (def input-max-std (conf-get 'l-in-current-max)) ; default maximum input current (Amps)
@@ -13,7 +14,7 @@
 (def eco-mode-active false)     ; Track eco mode state
 
 ; Target temperatures
-(def cooling-temperature-target 40)
+(def cooling-temperature-target 80)
 
 
 ; J1939 related functions
@@ -21,13 +22,17 @@
     (var pgn     0xFEEE)  ; 65262
     (var priority     6)
 
+    ; MOTOR temp sent as COOLANT temp
+    ; VESC  temp sent as OIL     temp
+
     ; Byte #1: SPN 110: Engine coolant temperature (-40 to 210°C, 1°C/bit)
     (var temp-coolant (+ (get-temp-mot) 40))
+
     ; Byte #2: SPN 174: Engine fuel temperature #1 (-40 to 210°C, 1°C/bit)
     ; 23°C => 63 => 0x3F
+
     ; Bytes #3 & #4: SPN 175: Engine oil temperature #1 (-273 to 1735°C, 0.03125°C/bit => x 32)
     (var temp-oil (to-i (* (+ (get-temp-fet) 273) 32)))
-
     (var oil-lsb (bits-enc-int 0x00 0 temp-oil 8))
     (var oil-msb (bits-enc-int 0x00 0 (bits-dec-int temp-oil 8 8) 8))
 
@@ -44,7 +49,10 @@
     (var pgn     0xF004)  ; 61444
     (var priority     3)
 
+    ; Byte #1 (bits 1-4): SPN 899: Engine torque mode
+
     ; Byte #2: SPN 512: Driver's demand percent torque (-125% to 125% 1%/bit)
+
     ; Byte #3: SPN 513: Actual engine percent torque   (-125% to 125% 1%/bit)
 
     ; Bytes #4 and #5: SPN 190: Engine speed (RPM) (0.125 rpm per bit => x 8)
@@ -68,15 +76,24 @@
     (var pgn     0xF003)  ; 61443
     (var priority     3)
 
-    ; Byte #3: SPN 93: Engine Percent Load (0% to 125% 1%/bit)
+    ; Byte #1:
+    ;  SPN 1437: Road Speed Limit Status
+    ;  SPN 559:  Accelerator Pedal Kickdown Switch
+    ;  SPN 558:  Accelerator Pedal 1 Low Idle Switch
+
+    ; Byte #2: SPN 91: Accelerator Pedal Position (0% to 100%, 0.4 %/bit)
+
+    ; Byte #3: SPN 93: Engine Percent Load (0% to 125%, 1 %/bit)
     ; 45% => 45 => 0x2D
+
+    ; Byte #4: SPN 974: Remote Accelerator Pedal Position
 
     (var eid 0x00000000u32)
     (var eid (bits-enc-int eid 0 j1939-ecu-sa 8))
     (var eid (bits-enc-int eid 8 pgn 18))
     (var eid (bits-enc-int eid 26 priority 3))
 
-    (var data (list 0xFF 0xFF 0x2D 0xFF 0xFF 0xFF 0xFF 0xFF))
+    (var data (list 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF))
     (can-send-eid eid data)
 })
 
@@ -86,6 +103,7 @@
 
     ; Bytes #1 & #2: SPN 166: Engine rated power (0.5 kW/bit => x 2)
     ; 20 kW => 40 => 0x0028 => 0x28 0x00
+
     ; Bytes #3 & #4: SPN 189: Engine rated RPM   (0.125 rpm/bit => x 8)
     ; 3500 rpm => 14000 => 0x000036B0 => 0xB0 0x36 0x00 0x00 (LSB)
 
@@ -103,14 +121,17 @@
     (var priority     6)
 
     ; Byte #1: SPN 94: Fuel delivery pressure (4 kPa/bit => / 4)
-    ; 2 bar => 200 kPa => 50 => 0x32
+
     ; Byte #2: n/a
+
     ; Byte #3: SPN 98: Engine oil level (0.4 %/bit => x 2.5)
+
     ; Byte #4: SPN 100: Engine oil pressure (4 kPa/bit => / 4)
-    ; 4 bar => 400 kPa => 100 => 0x64
+
     ; Bytes #5 & #6: SPN 101: Crankcase pressure (1/128kPa /bit, -250kPa)
+
     ; Byte #7: SPN 109: Engine coolant pressure (2 kPa/bit => / 2)
-    ; 3 bar => 300 kPa => 75 => 0x4B
+
     ; Byte #8: SPN 111: Engine coolant level (0.4 %/bit => x 2.5)
 
     (var eid 0x00000000u32)
@@ -118,7 +139,7 @@
     (var eid (bits-enc-int eid 8 pgn 18))
     (var eid (bits-enc-int eid 26 priority 3))
 
-    (var data (list 0x32 0xFF 0xFF 0x64 0xFF 0xFF 0x4B 0xFF ))
+    (var data (list 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF 0xFF ))
     (can-send-eid eid data)
 })
 
@@ -126,19 +147,18 @@
     (var pgn     0xFEE9)    ; 65257
     (var priority     6)
 
-    ; TODO: send real data
     ; Bytes #1, #2, #3 & #4: SPN 182: Engine trip fuel (0.5kg/bit => x 2)
-    ; 2 kg => 4 => 0x00000004 => 0x04 0x00 0x00 0x00 (LSB)
 
     ; Bytes #5, #6, #7 & #8: SPN 250: Engine total fuel used  (0.5kg/bit => x 2)
-    ; 4 kg => 8 => 0x00000008 => 0x08 0x00 0x00 0x00 (LSB)
+
+    ; We are sending 0 kg for both.
 
     (var eid 0x00000000u32)
     (var eid (bits-enc-int eid 0 j1939-ecu-sa 8))
     (var eid (bits-enc-int eid 8 pgn 18))
     (var eid (bits-enc-int eid 26 priority 3))
 
-    (var data (list  0x04 0x00 0x00 0x00 0x08 0x00 0x00 0x00))
+    (var data (list  0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00))
     (can-send-eid eid data)
 })
 
@@ -158,7 +178,7 @@
     (var eid (bits-enc-int eid 8 pgn 18))
     (var eid (bits-enc-int eid 26 priority 3))
 
-    (var data (list 0x60 0x00 0x00 0x00 0xD8 0x03 0x00 0x00))
+    (var data (list 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00))
     (can-send-eid eid data)
 })
 
@@ -170,8 +190,6 @@
     ; 0.05 hours/bit => 180 seconds/bit
     ;
     (var runtime-sec (sysinfo 'runtime))
-    ;(var runtime-hrs (to-i (/ runtime-sec 3600)))
-    ;(var hours-scaled (to-i (* runtime-hrs 20)))
     (var hours-scaled (to-i (/ runtime-sec 180)))
 
     (var hours-b0 (bits-enc-int 0x00 0 hours-scaled 8))
@@ -180,7 +198,6 @@
     (var hours-b3 (bits-enc-int 0x00 0 (bits-dec-int hours-scaled 24 8) 8))
 
     ; Bytes #5, #6, #7 & #8: SPN 249: Vehicule total distance (1000r/bit => / 1000)
-    ; (ignored)
 
     (var eid 0x00000000u32)
     (var eid (bits-enc-int eid 0 j1939-ecu-sa 8))
@@ -191,62 +208,101 @@
     (can-send-eid eid data)
 })
 
+(defun send-j1939-eco-request () {
+    (var pgn      0xEA)   ; CAN request
+    (var priority    3)   ; 3, because I decided
+
+    ; This is not a standard J1939 request
+    ; This is our own protocol to send events to ESP32
+    ; ...so we can use the 3 data bytes as we want.
+
+    (var eid 0x00000000u32)
+    (var eid (bits-enc-int eid 0 j1939-ecu-sa 8))  ; SA
+    (var eid (bits-enc-int eid 8 j1939-ecu2-sa 8)) ; DA
+    (var eid (bits-enc-int eid 16 pgn 10))         ; PGN
+    (var eid (bits-enc-int eid 26 priority 3))     ; PRIO
+
+    (if eco-mode-active {
+        ; Let's send "0x00 0x00 0x01" to indicate ECO mode is ON
+        (var data (list 0x00 0x00 0x01))
+    } {
+        ; Let's send "0x00 0x00 0x00" to indicate ECO mode is OFF
+        (var data (list 0x00 0x00 0x00))
+    })
+    (can-send-eid eid data)
+})
 
 ; Start J1939 loops
 (defun j1939-autosend () {
+    (loopwhile-thd 100 true {
+        (send-j1939-eco-request)
+        (sleep 1) ; every ~ 1s
+     })
     (loopwhile-thd 100 true {
         (if j1939-active {
             (send-ET1)})
         (sleep 1) ; every ~ 1s
      })
-    (loopwhile-thd 100 true {
-        (if j1939-active {
-            (send-EFL)})
-        (sleep 0.5) ; every 500ms
-    })
+    ;(loopwhile-thd 100 true {
+    ;    (if j1939-active {
+    ;        (send-EFL)})
+    ;    (sleep 0.5) ; every 500ms
+    ;})
     (loopwhile-thd 100 true {
         (if j1939-active {
             (send-EEC1)})
         (sleep 0.1) ; every 100ms
     })
-    (loopwhile-thd 100 true {
-        (if j1939-active {
-                (send-EEC2)})
-        (sleep 0.05) ; every 50ms
-    })
+    ;(loopwhile-thd 100 true {
+    ;    (if j1939-active {
+    ;            (send-EEC2)})
+    ;    (sleep 0.05) ; every 50ms
+    ;})
 })
 
 
 ; Monitor temperature loop (no action)
-(defun monitor-temp () {
+(defun monitor-temp-and-voltage () {
     (loopwhile-thd 100 true {
-        ;(var max-loop-when-shutdown 5)
-        (var temp-vesc  (get-temp-fet))
-        (var temp-motor (get-temp-mot))
+        
+        (var temp-vesc   (get-temp-fet))
+        (print (str-from-n temp-vesc   "[T/VESC ] %.1f C"))
+        
+        (var temp-motor  (get-temp-mot))
+        (print (str-from-n temp-motor  "[T/MOTOR] %.1f C"))
+        
+        (var runtime-sec (sysinfo 'runtime))
+        (print (str-from-n runtime-sec "[RUNTIME] %d seconds"))
 
-        (if (> temp-vesc cooling-temperature-target) {
-            (print (str-from-n temp-vesc "High temperature on VESC: %.1fC"))
+        (var raw-rpm (get-rpm))
+        (var mech-rpm (/ (if (< raw-rpm 0) (- raw-rpm) raw-rpm) 4))
+        (print (str-from-n mech-rpm "[RPM    ] %d rpm"))
+
+        (if eco-mode-active {
+            (print "[ECOMODE]: ON")
+        } {
+            (print "[ECOMODE]: OFF")
         })
-        (if (> temp-motor cooling-temperature-target) {
-            (print (str-from-n temp-motor "High temperature on MOTOR: %.1fC"))
-        })
-        (if (and (< temp-vesc cooling-temperature-target) (< temp-motor cooling-temperature-target))) {
-            (print "Temperatures are OK")
-        }
+
+        ;(var adc20-voltage (get-adc 20))
+        ;(print (str-from-n adc20-voltage "ADC20 voltage: %.3f V"))
+        ;(var adc21-voltage (get-adc 21))
+        ;(print (str-from-n adc21-voltage "ADC21 voltage: %.3f V"))
+
         (sleep 10) ; every 10s
     })
 })
 
 
 ; Handler for J1939 REQUEST
-(defun can-request (eid data) {
+(defun j1939-request (eid data) {
     (if (and j1939-active (eq eid 418054142i32)) { ; 0x18EAFFFE
         (if (eq data [0xE9 0xFE 0x00]) (send-FUEL))
         (if (eq data [0xBE 0xFE 0x00]) (send-EEC4))
         (if (eq data [0xE0 0xFE 0x00]) (send-DIST))
         (if (eq data [0xE5 0xFE 0x00]) (send-HOURS))
     }
-    (if (and j1939-active (eq eid 216662017i32)) { ; 0x18EA0001 (Coming from ESP)
+    (if (and j1939-active (eq eid 216662017i32)) { ; 0x0CEA0001 (Coming from ESP!)
         ; toggle eco mode
         (if eco-mode-active {
             (conf-set 'l-in-current-max input-max-std)
@@ -266,11 +322,11 @@
 ; This function waits for events and calls the appropriate handler
 (defun event-handler () (loopwhile true
     (recv
-        ((event-can-eid (? eid) . (? data)) (can-request eid data))
+        ((event-can-eid (? eid) . (? data)) (j1939-request eid data))
         (_ nil) ; ignore other events
 )))
 
-
+; This function initialises the event handler
 (defun init-event-handler () {
     (event-enable 'event-can-eid)
     (print "events enabled")
@@ -278,20 +334,24 @@
     (print "handler registered")
 })
 
-
+; Global init function
 (defun init () {
     (init-event-handler)
 })
 
+; Main function
 (defun main () {
     (set-print-prefix print-prefix)
     (init)
     (print "Init done")
 
-    (monitor-temp)
-    (print "Temperature monitoring loop started")
+    ; Debugging loop
+    ;(monitor-temp-and-voltage)
 
+    ; launch J1939 loops
     (j1939-autosend)
+
+    ; Set J1939 as active
     (def j1939-active true)
     (print "J1939 loops started")
 })
